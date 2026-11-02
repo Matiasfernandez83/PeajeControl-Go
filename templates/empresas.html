@@ -26,7 +26,7 @@
       <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#52525b">Email del administrador</label>
       <input type="email" name="email" required placeholder="admin@empresa.com" style="margin:6px 0 12px">
       <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#52525b">Clave inicial (mín. 6)</label>
-      <input type="password" name="clave" required style="margin:6px 0 14px">
+      <div class="clave-wrap" style="margin:6px 0 14px"><input type="password" name="clave" required>{% include "_ojo.html" %}</div>
       <button class="btn" type="submit">Crear empresa</button>
     </form>
   </div>
