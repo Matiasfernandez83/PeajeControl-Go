@@ -1,15 +1,67 @@
 # PeajeControl Go - Flask + pdfplumber. BD: SQLite (dev) o PostgreSQL (prod, via DATABASE_URL). Sin IA, sin API keys.
-import csv, io, os, re, sqlite3, base64, json
-from datetime import datetime
+import csv, io, os, re, sqlite3, base64, json, secrets, hmac, time
+from collections import defaultdict
+from datetime import datetime, timedelta
 from flask import Flask, g, request, redirect, session, render_template, send_file, flash, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from openpyxl import load_workbook, Workbook
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "cambiar-en-produccion")
+# Sin clave fija: si falta SECRET_KEY se genera una al azar (las sesiones no sobreviven al reinicio).
+IN_PROD = bool(os.environ.get("RENDER")) or os.environ.get("FLASK_ENV") == "production"
+app.secret_key = os.environ.get("SECRET_KEY")
+if not app.secret_key:
+    app.secret_key = secrets.token_hex(32)
+    print("ADVERTENCIA: falta la variable SECRET_KEY; se usa una clave aleatoria "
+          "(las sesiones se pierden al reiniciar). Definila en el entorno.")
 app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024  # tope de subida: 25 MB
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
-                  SESSION_COOKIE_SECURE=bool(os.environ.get("RENDER")))
+                  SESSION_COOKIE_SECURE=IN_PROD,
+                  PERMANENT_SESSION_LIFETIME=timedelta(hours=8))
+
+# ================= SEGURIDAD: headers, CSRF, rate limit =================
+@app.after_request
+def headers_seguridad(resp):
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Referrer-Policy"] = "no-referrer"
+    # La app usa estilos y scripts inline, por eso 'unsafe-inline'.
+    resp.headers["Content-Security-Policy"] = (
+        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+    if IN_PROD:
+        resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return resp
+
+def csrf_token():
+    if "_csrf" not in session:
+        session["_csrf"] = secrets.token_hex(16)
+    return session["_csrf"]
+
+@app.context_processor
+def inyectar_csrf():
+    return {"csrf_token": csrf_token}
+
+@app.before_request
+def validar_csrf():
+    if request.method == "POST":
+        enviado, esperado = request.form.get("_csrf", ""), session.get("_csrf", "")
+        if not esperado or not hmac.compare_digest(enviado, esperado):
+            return "Solicitud invalida (CSRF). Recargá la pagina e intentá de nuevo.", 400
+
+INTENTOS = defaultdict(list)  # clave (email o IP) -> instantes de logins fallidos
+MAX_INTENTOS, VENTANA = 5, 300  # 5 fallos cada 5 minutos
+
+def _claves_login(email):
+    ip = request.headers.get("X-Forwarded-For", "").split(",")[-1].strip() or request.remote_addr
+    return ["e:" + email, "i:" + str(ip)]
+
+def _bloqueado(claves):
+    ahora = time.time()
+    for k in claves:
+        INTENTOS[k] = [t for t in INTENTOS[k] if ahora - t < VENTANA]
+        if len(INTENTOS[k]) >= MAX_INTENTOS: return True
+    return False
 
 # ================= BASE DE DATOS (SQLite en dev / PostgreSQL en produccion) =================
 # Si existe DATABASE_URL (p.ej. la conexion de Supabase en Render) se usa PostgreSQL;
@@ -166,8 +218,13 @@ def init_db():
     for tabla in TABLAS_TENANT:
         con.execute(f"UPDATE {tabla} SET empresa_id=? WHERE empresa_id IS NULL", (emp_id,))
     if not con.execute("SELECT 1 FROM usuarios").fetchone():
+        # Instancia nueva: la clave del admin sale de ADMIN_PASSWORD o se genera y se imprime en el log.
+        clave_admin = os.environ.get("ADMIN_PASSWORD")
+        if not clave_admin:
+            clave_admin = secrets.token_urlsafe(12)
+            print(f"ADMIN INICIAL: admin@peajecontrol.com / {clave_admin}  (cambiala desde Configuracion)")
         con.execute("INSERT INTO usuarios(empresa_id,email,clave,nombre,rol) VALUES(?,?,?,?,?)",
-                    (emp_id, "admin@peajecontrol.com", generate_password_hash("admin"),
+                    (emp_id, "admin@peajecontrol.com", generate_password_hash(clave_admin),
                      "Administrador", "superadmin"))
     else:
         # El admin original pasa a superadmin (contempla el email viejo y el nuevo).
@@ -387,12 +444,20 @@ def landing():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        u = db().execute("SELECT * FROM usuarios WHERE email=?",
-                         (request.form["email"].strip().lower(),)).fetchone()
-        if u and check_password_hash(u["clave"], request.form["clave"]):
+        email = request.form.get("email", "").strip().lower()
+        claves = _claves_login(email)
+        if _bloqueado(claves):
+            flash("Demasiados intentos fallidos. Esperá 5 minutos e intentá de nuevo.")
+            return render_template("login.html"), 429
+        u = db().execute("SELECT * FROM usuarios WHERE email=?", (email,)).fetchone()
+        if u and check_password_hash(u["clave"], request.form.get("clave", "")):
+            for k in claves: INTENTOS.pop(k, None)
+            session.clear()  # anti session-fixation
+            session.permanent = True
             session.update(uid=u["id"], email=u["email"], nombre=u["nombre"],
                            rol=u["rol"], empresa_id=u["empresa_id"])
             return redirect("/")
+        for k in claves: INTENTOS[k].append(time.time())
         flash("Credenciales invalidas.")
     return render_template("login.html")
 
@@ -403,6 +468,12 @@ def salir():
 @app.errorhandler(413)
 def archivo_muy_grande(_):
     return "El archivo supera el limite permitido (25 MB). Dividilo o comprimilo.", 413
+
+def xl(v):
+    """Anti inyeccion de formulas: un texto que empieza con = + - @ (o control) se prefija con comilla."""
+    if isinstance(v, str) and v and (v[0] in "=+-@" or ord(v[0]) < 32):
+        return "'" + v
+    return v
 
 # ================= 1) TABLERO =================
 @app.route("/")
@@ -630,7 +701,7 @@ def exportar_gastos():
     ws.append(["FECHA", "CONCEPTO", "CATEGORIA", "MONTO", "BANCO", "RESUMEN ORIGEN"])
     for m in db().execute("""SELECT g.*, r.banco, r.archivo FROM gastos g
         JOIN resumenes r ON r.id=g.resumen_id WHERE g.empresa_id=? ORDER BY r.id, g.id""", (emp(),)):
-        ws.append([m["fecha"], m["concepto"], m["categoria"], m["monto"], m["banco"], m["archivo"]])
+        ws.append([xl(v) for v in (m["fecha"], m["concepto"], m["categoria"], m["monto"], m["banco"], m["archivo"])])
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
     return send_file(buf, as_attachment=True, download_name=f"gastos_tarjetas_{datetime.now():%Y%m%d}.xlsx")
 
@@ -670,13 +741,13 @@ def exportar():
     wb = Workbook(); ws = wb.active; ws.title = "Movimientos"
     ws.append(["FECHA", "TAG", "PATENTE", "CONCEPTO", "MONTO", "RESPONSABLE", "EQUIPO", "VERIFICADO", "ARCHIVO"])
     for m in db().execute("SELECT * FROM movimientos WHERE empresa_id=? ORDER BY dueno, fecha", (emp(),)):
-        ws.append([m["fecha"], m["tag"], m["patente"], m["concepto"], m["monto"],
-                   m["dueno"], m["equipo"], "SI" if m["verificado"] else "NO", m["archivo"]])
+        ws.append([xl(v) for v in (m["fecha"], m["tag"], m["patente"], m["concepto"], m["monto"],
+                   m["dueno"], m["equipo"], "SI" if m["verificado"] else "NO", m["archivo"])])
     ws2 = wb.create_sheet("Gastos tarjetas")
     ws2.append(["FECHA", "CONCEPTO", "CATEGORIA", "MONTO", "BANCO", "RESUMEN"])
     for m in db().execute("""SELECT g.*, r.banco, r.archivo FROM gastos g
         JOIN resumenes r ON r.id=g.resumen_id WHERE g.empresa_id=? ORDER BY r.id, g.id""", (emp(),)):
-        ws2.append([m["fecha"], m["concepto"], m["categoria"], m["monto"], m["banco"], m["archivo"]])
+        ws2.append([xl(v) for v in (m["fecha"], m["concepto"], m["categoria"], m["monto"], m["banco"], m["archivo"])])
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
     return send_file(buf, as_attachment=True, download_name=f"reporte_maestro_{datetime.now():%Y%m%d}.xlsx")
 

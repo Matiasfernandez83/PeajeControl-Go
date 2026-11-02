@@ -4,7 +4,7 @@
 <div class="tarjeta">
   <p class="mini">Subí el Excel de flota. Se detectan las columnas por encabezado (TAG, PATENTE, RESPONSABLE,
   EQUIPO, ESTADO, MARCA), se deduplican los TAGs y se reemplaza la base completa.</p>
-  <form class="linea" method="post" enctype="multipart/form-data">
+  <form class="linea" method="post" enctype="multipart/form-data"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <input type="file" name="archivo" accept=".xlsx,.csv" required>
     <button class="btn" type="submit">Actualizar base</button>
     <a class="btn sec" href="/importar">← Volver a importar</a>

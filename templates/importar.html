@@ -7,7 +7,7 @@
     <p class="mini" style="margin:8px 0 14px">Subí facturas de peajes en <b>PDF</b> (AUSA, AUSOL, TelePASE) o el detalle en Excel/CSV.
     Se extraen los pases, se cruza cada TAG contra la base maestra por sus últimos 8 dígitos
     y se valida la suma contra el total del documento (semáforo de control).</p>
-    <form method="post" enctype="multipart/form-data">
+    <form method="post" enctype="multipart/form-data"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <div style="border:2px dashed #d4d4d8;border-radius:12px;padding:30px;text-align:center;background:#fafafa;margin-bottom:14px">
         <div style="font-size:40px">📄</div>
         <p style="font-weight:700;margin:8px 0">Seleccioná facturas AUSA o resúmenes</p>
@@ -36,7 +36,7 @@
       <td class="num ocultar-mov">{% if a.td %}{{ a.td|pesos }}{% else %}—{% endif %}</td>
       <td>{% if not a.td %}<span class="no">s/control</span>{% elif (a.td - a.t)|abs < 1 %}<span class="ok">✔ OK</span>{% else %}<span style="color:#d97706;font-weight:700">⚠ dif {{ (a.td - a.t)|abs|pesos }}</span>{% endif %}</td>
       <td class="num">
-        <form method="post" action="/movimientos/borrar" onsubmit="return confirm('¿Eliminar los movimientos de este archivo?')">
+        <form method="post" action="/movimientos/borrar" onsubmit="return confirm('¿Eliminar los movimientos de este archivo?')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
           <input type="hidden" name="archivo" value="{{ a.archivo }}">
           <button class="btn chico sec" type="submit">Eliminar</button>
         </form>
