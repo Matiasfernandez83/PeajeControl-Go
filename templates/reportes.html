@@ -18,7 +18,7 @@
 
 <div class="tarjeta">
   <h3 style="margin-bottom:14px">🕘 Historial de archivos</h3>
-  <form method="post" action="/reportes/borrar" onsubmit="return confirm('¿Eliminar los archivos seleccionados y todos sus registros?')">
+  <form method="post" action="/reportes/borrar" onsubmit="return confirm('¿Eliminar los archivos seleccionados y todos sus registros?')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   <div style="overflow-x:auto">
   <table>
     <tr>

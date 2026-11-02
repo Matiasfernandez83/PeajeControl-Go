@@ -30,7 +30,7 @@ button:hover{background:#c00511}
 </style>
 </head>
 <body>
-<form class="caja" method="post">
+<form class="caja" method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   <div class="wm">
     <svg class="wm-ico" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-label="PeajesControl Go">
       <defs>

@@ -18,7 +18,7 @@
   <div class="tarjeta">
     <h3 style="margin-bottom:4px">➕ Alta de empresa cliente</h3>
     <p class="mini">Se crea la empresa y su usuario administrador. Ese admin entra con su email y clave y solo ve los datos de su empresa.</p>
-    <form method="post" action="/empresas/crear">
+    <form method="post" action="/empresas/crear"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#52525b">Nombre de la empresa</label>
       <input type="text" name="empresa" required placeholder="Transportes del Sur SA" style="margin:6px 0 12px">
       <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#52525b">Nombre del administrador</label>
@@ -47,7 +47,7 @@
           {% if e.id == session.empresa_id %}
           <span class="mini">(vos)</span>
           {% else %}
-          <form method="post" action="/empresas/borrar/{{ e.id }}" onsubmit="return confirm('¿Eliminar la empresa «{{ e.nombre }}» y TODOS sus datos (flota, movimientos, gastos y usuarios)? Esta acción no se puede deshacer.')">
+          <form method="post" action="/empresas/borrar/{{ e.id }}" onsubmit="return confirm('¿Eliminar la empresa «{{ e.nombre }}» y TODOS sus datos (flota, movimientos, gastos y usuarios)? Esta acción no se puede deshacer.')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
             <button class="btn chico sec" type="submit">Eliminar</button>
           </form>
           {% endif %}

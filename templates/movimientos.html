@@ -42,7 +42,7 @@
       <div><span style="font-size:20px;font-weight:900;color:var(--rojo)">{{ resumen.t|pesos }}</span> <span class="mini">total del filtro</span></div>
     </div>
   </div>
-  <form method="post" action="/movimientos/borrar" onsubmit="return confirm('¿Eliminar los movimientos seleccionados?')">
+  <form method="post" action="/movimientos/borrar" onsubmit="return confirm('¿Eliminar los movimientos seleccionados?')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   <div style="overflow-x:auto">
   <table>
     <tr>
