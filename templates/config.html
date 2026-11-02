@@ -18,7 +18,7 @@
       <p class="mini">Cambiá la clave del usuario con el que iniciaste sesión.</p>
       <form method="post" action="/config/clave"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
         <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#52525b">Nueva clave (mín. 6)</label>
-        <input type="password" name="nueva" required style="margin:6px 0 12px">
+        <div class="clave-wrap" style="margin:6px 0 12px"><input type="password" name="nueva" required>{% include "_ojo.html" %}</div>
         <button class="btn" type="submit">Actualizar clave</button>
       </form>
     </div>
@@ -65,7 +65,7 @@
     <form method="post" action="/config/usuario" class="linea"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <input type="text" name="nombre" placeholder="Nombre" required style="max-width:180px">
       <input type="email" name="email" placeholder="Correo" required style="max-width:220px">
-      <input type="password" name="clave" placeholder="Clave (mín. 6)" required style="max-width:160px">
+      <div class="clave-wrap" style="max-width:190px"><input type="password" name="clave" placeholder="Clave (mín. 6)" required>{% include "_ojo.html" %}</div>
       <button class="btn" type="submit">Crear</button>
     </form>
   </div>
