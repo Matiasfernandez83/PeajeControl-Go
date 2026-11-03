@@ -753,6 +753,8 @@ def flota_plantilla():
     return send_file(b, as_attachment=True, download_name="plantilla_flota.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
+FLOTA_POR_PAGINA = 50
+
 @app.route("/flota", methods=["GET", "POST"])
 def flota():
     d = db()
@@ -779,8 +781,78 @@ def flota():
             d.commit()
             flash(f"Base actualizada: {len(nuevos)} unidades unicas.")
         return redirect("/flota")
-    unidades = d.execute("SELECT * FROM flota WHERE empresa_id=? ORDER BY dueno, patente", (emp(),)).fetchall()
-    return render_template("flota.html", unidades=unidades)
+    q = request.args.get("q", "").strip()
+    p = request.args.get("p", "1")
+    pagina = max(int(p), 1) if p.isdigit() else 1
+    where, args = " WHERE empresa_id=?", [emp()]
+    if q:
+        like = "%" + q.upper() + "%"
+        where += " AND (UPPER(tag) LIKE ? OR UPPER(patente) LIKE ? OR UPPER(dueno) LIKE ?)"
+        args += [like, like, like]
+    total_flota = d.execute("SELECT COUNT(*) n FROM flota WHERE empresa_id=?", (emp(),)).fetchone()["n"]
+    total = d.execute("SELECT COUNT(*) n FROM flota" + where, args).fetchone()["n"] if q else total_flota
+    paginas = max((total + FLOTA_POR_PAGINA - 1) // FLOTA_POR_PAGINA, 1)
+    pagina = min(pagina, paginas)
+    unidades = d.execute("SELECT * FROM flota" + where + " ORDER BY dueno, patente, id LIMIT ? OFFSET ?",
+                         args + [FLOTA_POR_PAGINA, (pagina - 1) * FLOTA_POR_PAGINA]).fetchall()
+    return render_template("flota.html", unidades=unidades, q=q, pagina=pagina, paginas=paginas,
+                           total=total, total_flota=total_flota, por_pagina=FLOTA_POR_PAGINA)
+
+# --- ABM manual de equipos (de a uno). Alta/edicion: cualquier usuario; baja: solo admin/superadmin ---
+def _datos_equipo():
+    f = request.form
+    c = lambda k: f.get(k, "").strip()[:80]
+    return norm_tag(c("tag")), norm_patente(c("patente")), c("dueno"), c("equipo"), c("estado"), c("marca")
+
+def _duplicado(d, tag, patente, excluir_id=0):
+    """Otro equipo de la empresa con el mismo TAG o la misma patente."""
+    if tag:
+        r = d.execute("SELECT id FROM flota WHERE empresa_id=? AND tag=? AND id<>?", (emp(), tag, excluir_id)).fetchone()
+        if r: return f"Ya existe un equipo con el TAG {tag}."
+    if patente:
+        r = d.execute("SELECT id FROM flota WHERE empresa_id=? AND REPLACE(REPLACE(UPPER(patente),' ',''),'-','')=? AND id<>?",
+                      (emp(), patente, excluir_id)).fetchone()
+        if r: return f"Ya existe un equipo con la patente {patente}."
+    return None
+
+@app.route("/flota/agregar", methods=["POST"])
+def flota_agregar():
+    d = db(); tag, pat, dueno, equipo, estado, marca = _datos_equipo()
+    if not tag and not pat:
+        flash("Cargá al menos el TAG o la patente.")
+    elif (dup := _duplicado(d, tag, pat)):
+        flash(dup + " No se agregó.")
+    else:
+        d.execute("INSERT INTO flota(empresa_id,tag,patente,dueno,equipo,estado,marca) VALUES(?,?,?,?,?,?,?)",
+                  (emp(), tag, pat, dueno, equipo, estado, marca))
+        d.commit(); flash("Equipo agregado.")
+    return redirect("/flota")
+
+@app.route("/flota/editar/<int:fid>", methods=["POST"])
+def flota_editar(fid):
+    d = db(); tag, pat, dueno, equipo, estado, marca = _datos_equipo()
+    if not d.execute("SELECT 1 FROM flota WHERE id=? AND empresa_id=?", (fid, emp())).fetchone():
+        flash("Equipo no encontrado.")
+    elif not tag and not pat:
+        flash("Cargá al menos el TAG o la patente.")
+    elif (dup := _duplicado(d, tag, pat, fid)):
+        flash(dup + " No se guardaron los cambios.")
+    else:
+        d.execute("UPDATE flota SET tag=?,patente=?,dueno=?,equipo=?,estado=?,marca=? WHERE id=? AND empresa_id=?",
+                  (tag, pat, dueno, equipo, estado, marca, fid, emp()))
+        d.commit(); flash("Equipo actualizado.")
+    return redirect("/flota")
+
+@app.route("/flota/borrar/<int:fid>", methods=["POST"])
+def flota_borrar(fid):
+    if session.get("rol") not in ("admin", "superadmin"):
+        flash("Solo un administrador puede eliminar equipos."); return redirect("/flota")
+    d = db()
+    existe = d.execute("SELECT 1 FROM flota WHERE id=? AND empresa_id=?", (fid, emp())).fetchone()
+    if existe:
+        d.execute("DELETE FROM flota WHERE id=? AND empresa_id=?", (fid, emp())); d.commit()
+    flash("Equipo eliminado." if existe else "Equipo no encontrado.")
+    return redirect("/flota")
 
 # ================= 3) GASTOS TARJETAS =================
 def procesar_resumen(arch):

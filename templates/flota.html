@@ -4,7 +4,8 @@
 <h1>Base maestra de flota</h1>
 <div class="tarjeta">
   <p class="mini">Subí el Excel de flota. Se detectan las columnas por encabezado (TAG, PATENTE, RESPONSABLE,
-  EQUIPO, ESTADO, MARCA), se deduplican los TAGs y se reemplaza la base completa.</p>
+  EQUIPO, ESTADO, MARCA), se deduplican los TAGs y se reemplaza la base completa. Para un cambio puntual,
+  agregá o editá equipos de a uno desde la tabla.</p>
   <form class="linea" method="post" enctype="multipart/form-data"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <input type="file" name="archivo" accept=".xlsx,.csv" required>
     <button class="btn" type="submit"><svg class="i"><use href="#i-subir"/></svg>Actualizar base</button>
@@ -14,15 +15,97 @@
   <p class="mini" style="margin:12px 0 0">Descargá la plantilla, cargá tus datos y subí el archivo.</p>
 </div>
 <div class="tarjeta">
-  <h3 style="margin-bottom:16px">{{ unidades|length }} unidades</h3>
+  <div class="linea" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+    <h3 style="margin:0">{{ total_flota }} equipos cargados{% if q %} <span class="mini" style="margin:0">({{ total }} coinciden con la búsqueda)</span>{% endif %}</h3>
+    <button class="btn" type="button" onclick="abrirEquipo()"><svg class="i"><use href="#i-mas"/></svg>Agregar equipo</button>
+  </div>
+  <form method="get" class="linea" style="margin-bottom:16px">
+    <input type="text" name="q" value="{{ q }}" placeholder="Buscar por TAG, patente o responsable" style="max-width:360px" aria-label="Buscar equipo">
+    <button class="btn gh" type="submit"><svg class="i"><use href="#i-buscar"/></svg>Buscar</button>
+    {% if q %}<a class="btn gh" href="/flota">Limpiar</a>{% endif %}
+  </form>
   <div class="tabla-wrap">
   <table>
-    <tr><th>TAG</th><th>Patente</th><th>Responsable</th><th class="ocultar-mov">Equipo</th><th class="ocultar-mov">Estado</th><th class="ocultar-mov">Marca</th></tr>
+    <tr><th>TAG</th><th>Patente</th><th>Responsable</th><th class="ocultar-mov">Equipo</th><th class="ocultar-mov">Estado</th><th class="ocultar-mov">Marca</th><th></th></tr>
     {% for u in unidades %}
     <tr><td class="mono">{{ u.tag }}</td><td class="mono">{{ u.patente }}</td><td>{{ u.dueno }}</td>
-        <td class="ocultar-mov">{{ u.equipo }}</td><td class="ocultar-mov">{{ u.estado }}</td><td class="ocultar-mov">{{ u.marca }}</td></tr>
-    {% else %}<tr><td colspan="6" class="td-vacio">{{ vacio('camion', 'La base está vacía', 'Subí el Excel de flota para empezar.') }}</td></tr>{% endfor %}
+        <td class="ocultar-mov">{{ u.equipo }}</td><td class="ocultar-mov">{{ u.estado }}</td><td class="ocultar-mov">{{ u.marca }}</td>
+        <td style="white-space:nowrap;text-align:right">
+          <button class="btn-icono" type="button" title="Editar equipo" aria-label="Editar equipo"
+            data-id="{{ u.id }}" data-tag="{{ u.tag }}" data-patente="{{ u.patente }}" data-dueno="{{ u.dueno }}"
+            data-equipo="{{ u.equipo }}" data-estado="{{ u.estado }}" data-marca="{{ u.marca }}"
+            onclick="abrirEquipo(this)"><svg class="i"><use href="#i-lapiz"/></svg></button>
+          {% if session.rol in ('admin','superadmin') %}
+          <button class="btn-icono" type="button" title="Eliminar equipo" aria-label="Eliminar equipo"
+            data-id="{{ u.id }}" data-tag="{{ u.tag }}" data-patente="{{ u.patente }}"
+            onclick="confirmarBaja(this)"><svg class="i"><use href="#i-papelera"/></svg></button>
+          {% endif %}
+        </td></tr>
+    {% else %}<tr><td colspan="7" class="td-vacio">{% if q %}{{ vacio('buscar', 'Sin resultados', 'Ningún equipo coincide con la búsqueda.') }}{% else %}{{ vacio('camion', 'La base está vacía', 'Subí el Excel de flota o agregá un equipo.') }}{% endif %}</td></tr>{% endfor %}
   </table>
   </div>
+  {% if paginas > 1 %}
+  <div class="linea" style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:16px">
+    {% if pagina > 1 %}<a class="btn chico gh" href="/flota?p={{ pagina - 1 }}{% if q %}&q={{ q|urlencode }}{% endif %}">&larr; Anterior</a>{% endif %}
+    <span class="mini" style="margin:0">Página {{ pagina }} de {{ paginas }}</span>
+    {% if pagina < paginas %}<a class="btn chico gh" href="/flota?p={{ pagina + 1 }}{% if q %}&q={{ q|urlencode }}{% endif %}">Siguiente &rarr;</a>{% endif %}
+  </div>
+  {% endif %}
 </div>
+
+<div class="modal" id="modal-equipo">
+  <div class="caja" style="max-width:520px">
+    <div class="cab"><h3 id="eq-titulo">Agregar equipo</h3><button type="button" onclick="cerrarEquipo()" aria-label="Cerrar"><svg class="i"><use href="#i-cerrar"/></svg></button></div>
+    <div class="cuerpo" style="padding-top:20px">
+      <form method="post" id="eq-form" action="/flota/agregar"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="campo"><label for="eq-tag">Número de TAG</label><input type="text" id="eq-tag" name="tag" maxlength="40" autocomplete="off"></div>
+        <div class="campo"><label for="eq-patente">Patente</label><input type="text" id="eq-patente" name="patente" maxlength="20" autocomplete="off"></div>
+        <div class="campo"><label for="eq-dueno">Responsable</label><input type="text" id="eq-dueno" name="dueno" maxlength="80" autocomplete="off"></div>
+        <div class="campo"><label for="eq-equipo">Equipo</label><input type="text" id="eq-equipo" name="equipo" maxlength="80" autocomplete="off"></div>
+        <div class="campo"><label for="eq-estado">Estado</label><input type="text" id="eq-estado" name="estado" maxlength="40" autocomplete="off" placeholder="ACTIVO"></div>
+        <div class="campo"><label for="eq-marca">Marca</label><input type="text" id="eq-marca" name="marca" maxlength="40" autocomplete="off"></div>
+        <p class="mini">Hace falta al menos el TAG o la patente.</p>
+        <div class="linea" style="display:flex;gap:10px;justify-content:flex-end">
+          <button class="btn gh" type="button" onclick="cerrarEquipo()">Cancelar</button>
+          <button class="btn" type="submit" id="eq-guardar"><svg class="i"><use href="#i-check"/></svg>Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="modal-baja">
+  <div class="caja" style="max-width:440px">
+    <div class="cab"><h3>Eliminar equipo</h3><button type="button" onclick="cerrarBaja()" aria-label="Cerrar"><svg class="i"><use href="#i-cerrar"/></svg></button></div>
+    <div class="cuerpo" style="padding-top:20px">
+      <p id="baja-texto" style="margin-bottom:16px"></p>
+      <form method="post" id="baja-form" class="linea" style="display:flex;gap:10px;justify-content:flex-end"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="btn gh" type="button" onclick="cerrarBaja()">Cancelar</button>
+        <button class="btn" type="submit"><svg class="i"><use href="#i-papelera"/></svg>Eliminar</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function abrirEquipo(b){
+  var f=document.getElementById('eq-form'), ed=!!b;
+  document.getElementById('eq-titulo').textContent=ed?'Editar equipo':'Agregar equipo';
+  f.action=ed?'/flota/editar/'+b.dataset.id:'/flota/agregar';
+  ['tag','patente','dueno','equipo','estado','marca'].forEach(function(k){document.getElementById('eq-'+k).value=ed?(b.dataset[k]||''):'';});
+  document.getElementById('modal-equipo').classList.add('abierto');
+  document.getElementById('eq-tag').focus();
+}
+function cerrarEquipo(){document.getElementById('modal-equipo').classList.remove('abierto');}
+function confirmarBaja(b){
+  var que=[b.dataset.tag&&('TAG '+b.dataset.tag), b.dataset.patente&&('patente '+b.dataset.patente)].filter(Boolean).join(' / ');
+  document.getElementById('baja-texto').textContent='Se va a eliminar el equipo '+que+'. Esta acción no se puede deshacer.';
+  document.getElementById('baja-form').action='/flota/borrar/'+b.dataset.id;
+  document.getElementById('modal-baja').classList.add('abierto');
+}
+function cerrarBaja(){document.getElementById('modal-baja').classList.remove('abierto');}
+['modal-equipo','modal-baja'].forEach(function(id){var m=document.getElementById(id);
+  m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('abierto');});});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){cerrarEquipo();cerrarBaja();}});
+</script>
 {% endblock %}

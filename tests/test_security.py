@@ -245,6 +245,49 @@ def test_carga_multiple_resumenes():
     html = r.get_data(as_text=True)
     assert "r1.xlsx" in html and "r2.xlsx" in html and html.count("1 consumos") >= 2
 
+def test_flota_abm_manual():
+    c = logueado()
+    r = post(c, "/flota/agregar", {"tag": "ar-1234567-8", "patente": "zz 999 aa", "dueno": "JUAN", "equipo": "EQ1", "estado": "ACTIVO", "marca": "IVECO"}, "/flota")
+    cx = A._conectar()
+    f = cx.execute("SELECT * FROM flota WHERE patente='ZZ999AA'").fetchone()
+    assert f and f["tag"] == "12345678" and f["dueno"] == "JUAN" and f["empresa_id"] == 1
+    # duplicado por TAG o patente: no se agrega
+    post(c, "/flota/agregar", {"tag": "12345678", "patente": "OTRA1"}, "/flota")
+    post(c, "/flota/agregar", {"tag": "", "patente": "ZZ-999-AA"}, "/flota")
+    assert cx.execute("SELECT COUNT(*) n FROM flota WHERE tag='12345678' OR patente='ZZ999AA'").fetchone()["n"] == 1
+    # vacio: no se agrega
+    antes = cx.execute("SELECT COUNT(*) n FROM flota").fetchone()["n"]
+    post(c, "/flota/agregar", {"dueno": "SOLO NOMBRE"}, "/flota")
+    assert cx.execute("SELECT COUNT(*) n FROM flota").fetchone()["n"] == antes
+    # la tabla muestra, busca y pagina
+    assert "ZZ999AA" in c.get("/flota?q=juan").get_data(as_text=True)
+    assert "ZZ999AA" not in c.get("/flota?q=noexiste").get_data(as_text=True)
+    # edicion
+    post(c, f"/flota/editar/{f['id']}", {"tag": "12345678", "patente": "ZZ999AA", "dueno": "PEDRO", "marca": "SCANIA"}, "/flota")
+    g = cx.execute("SELECT * FROM flota WHERE id=?", (f["id"],)).fetchone()
+    assert g["dueno"] == "PEDRO" and g["marca"] == "SCANIA"
+    # otra empresa: no ve, no edita, no borra equipos ajenos
+    post(c, "/empresas/crear", {"empresa": "Flota Ajena SA", "email": "ajena@test.com", "clave": "ajenaajena", "nombre": "Ajeno"}, "/empresas")
+    c2 = cliente(); login(c2, "ajena@test.com", "ajenaajena")
+    assert "ZZ999AA" not in c2.get("/flota").get_data(as_text=True)
+    post(c2, f"/flota/editar/{f['id']}", {"tag": "12345678", "dueno": "HACKEADO"}, "/flota")
+    post(c2, f"/flota/borrar/{f['id']}", {}, "/flota")
+    h = cx.execute("SELECT * FROM flota WHERE id=?", (f["id"],)).fetchone()
+    assert h and h["dueno"] == "PEDRO", "otra empresa toco un equipo ajeno"
+    # el rol no admin no puede borrar (usuario operador de la misma empresa)
+    cx.execute("INSERT INTO usuarios(empresa_id,email,clave,nombre,rol) VALUES(1,'op@test.com',?,?,?)",
+               (A.generate_password_hash("operador1"), "Op", "operador")); cx.commit()
+    c3 = cliente(); login(c3, "op@test.com", "operador1")
+    post(c3, f"/flota/borrar/{f['id']}", {}, "/flota")
+    assert cx.execute("SELECT 1 FROM flota WHERE id=?", (f["id"],)).fetchone(), "operador no debe borrar"
+    # baja por admin
+    post(c, f"/flota/borrar/{f['id']}", {}, "/flota")
+    assert not cx.execute("SELECT 1 FROM flota WHERE id=?", (f["id"],)).fetchone()
+    # la carga masiva sigue funcionando
+    c.post("/flota", data={"_csrf": token(c, "/flota"), "archivo": (xlsx([["NUMERO DE TAG", "PATENTE"], ["11112222", "AAA111"]]), "f.xlsx")},
+           content_type="multipart/form-data")
+    assert cx.execute("SELECT COUNT(*) n FROM flota WHERE empresa_id=1").fetchone()["n"] == 1
+
 if __name__ == "__main__":
     fallos = 0
     for nombre, fn in list(globals().items()):
