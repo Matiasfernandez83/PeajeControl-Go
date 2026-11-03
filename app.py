@@ -1,5 +1,5 @@
 # PeajeControl Go - Flask + pdfplumber. BD: SQLite (dev) o PostgreSQL (prod, via DATABASE_URL). Sin IA, sin API keys.
-import csv, io, os, re, sqlite3, base64, json, secrets, hmac, time
+import csv, io, os, re, sqlite3, base64, json, secrets, hmac, time, unicodedata
 from collections import defaultdict
 from datetime import datetime, timedelta
 from flask import Flask, g, request, redirect, session, render_template, send_file, flash, jsonify
@@ -244,15 +244,21 @@ def norm_tag(v):
     return d[-8:] if len(d) >= 8 else d
 
 def norm_monto(v):
+    """Dinero en coma argentina (40.000,00) o punto (9896.82). Acepta negativos y '$'."""
     if isinstance(v, (int, float)): return float(v)
     s = re.sub(r"[^\d.,\-]", "", str(v or ""))
+    neg = s.startswith("-"); s = s.replace("-", "")
     if not s: return 0.0
-    if "," in s and "." in s:
+    if "," in s and "." in s:   # el ultimo separador es el decimal
         s = s.replace(".", "").replace(",", ".") if s.rfind(",") > s.rfind(".") else s.replace(",", "")
-    elif "," in s:
-        s = s.replace(",", ".")
-    try: return float(s)
+    elif "," in s:              # solo coma: decimal (salvo miles tipo 1,234,567)
+        s = s.replace(",", "") if re.fullmatch(r"\d{1,3}(,\d{3})+", s) else s.replace(",", ".")
+    elif "." in s:
+        if s.count(".") > 1 or re.fullmatch(r"\d{1,3}\.\d{3}", s):   # 1.234.567 o .000 = miles
+            s = s.replace(".", "")
+    try: r = float(s)
     except ValueError: return 0.0
+    return -r if neg else r
 
 RE_FECHA = re.compile(r"\b(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})\b")
 
@@ -271,7 +277,7 @@ def pesos(n):
 app.jinja_env.filters["pesos"] = pesos
 
 KEYS = {
-    "tag": ["NUMERO DE TAG", "NRO TAG", "N TAG", "TAG", "DISPOSITIVO"],
+    "tag": ["NUMERO DE TAG", "NUMERO TAG", "NUMEROTAG", "NRO TAG", "N TAG", "TAG", "DISPOSITIVO"],
     "patente": ["PATENTE", "DOMINIO"],
     "dueno": ["RESPONSABLE DE USUARIO", "RESPONSABLE", "DUENO", "DUEÑO", "TITULAR"],
     "equipo": ["EQUIPOS", "EQUIPO"], "estado": ["ESTADO"], "marca": ["MARCA"],
@@ -279,26 +285,30 @@ KEYS = {
     "monto": ["IMPORTE", "MONTO", "VALOR", "TOTAL"],
 }
 
-def leer_filas(archivo):
+def leer_filas(archivo, campos=None, clave=None):
+    """CSV/Excel -> filas. En Excel con varias hojas y `campos`/`clave`, usa la primera hoja
+    cuyo encabezado contiene `clave` (si no hay ninguna, junta todas como antes)."""
     nombre = archivo.filename.lower()
     if nombre.endswith(".csv"):
         texto = archivo.read().decode("utf-8-sig", errors="replace")
         sep = ";" if texto.count(";") > texto.count(",") else ","
         return [row for row in csv.reader(io.StringIO(texto), delimiter=sep)]
     wb = load_workbook(archivo, read_only=True, data_only=True)
-    filas = []
-    for hoja in wb.worksheets:
-        for row in hoja.iter_rows(values_only=True):
-            filas.append(list(row))
-    return filas
+    hojas = [[list(row) for row in hoja.iter_rows(values_only=True)] for hoja in wb.worksheets]
+    if campos and clave:
+        for filas in hojas:
+            mapa, _ = mapear_columnas(filas, campos)
+            if mapa and clave in mapa: return filas
+    return [f for filas in hojas for f in filas]
 
 def mapear_columnas(filas, campos):
     for i, fila in enumerate(filas[:15]):
         celdas = [re.sub(r"[^A-ZÑ ]", "", str(c or "").upper().strip()) for c in fila]
         mapa = {}
-        for campo in campos:
-            for j, celda in enumerate(celdas):
-                if celda and any(k in celda for k in KEYS[campo]) and j not in mapa.values():
+        for campo in campos:   # la clave mas especifica (primera de KEYS) gana, sin importar la columna
+            for k in KEYS[campo]:
+                j = next((j for j, c in enumerate(celdas) if c and k in c and j not in mapa.values()), None)
+                if j is not None:
                     mapa[campo] = j; break
         if len(mapa) >= 2:
             return mapa, i + 1
@@ -306,8 +316,6 @@ def mapear_columnas(filas, campos):
 
 # ================= EXTRACCION PDF (sin IA) =================
 RE_MONTO = re.compile(r"\$?\s*\d{1,3}(?:\.\d{3})*,\d{2}|\$?\s*\d+,\d{2}")
-RE_TAG = re.compile(r"\b[A-Z]{0,4}\d{8,14}\b")
-RE_TOTAL = re.compile(r"(TOTAL\s+GRAVADO|SUBTOTAL|IMPORTE\s+TOTAL|TOTAL)\D*?([\d.,]+,\d{2})", re.I)
 RE_TOTAL_TARJETA = re.compile(r"(TOTAL\s+A\s+PAGAR|SALDO\s+ACTUAL|TOTAL\s+CONSUMOS|PAGO\s+TOTAL)\D*?([\d.,]+,\d{2})", re.I)
 RE_PERIODO = re.compile(r"(CIERRE|PERIODO|RESUMEN)\D{0,20}(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})", re.I)
 RE_VENC = re.compile(r"(VENCIMIENTO|VENCE|VTO)\D{0,20}(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})", re.I)
@@ -323,8 +331,8 @@ def texto_pdf(archivo):
     with pdfplumber.open(archivo) as pdf:
         for pag in pdf.pages:
             texto += (pag.extract_text() or "") + "\n"
-    if not texto.strip():
-        raise ValueError("el PDF no tiene texto legible (puede ser un escaneo).")
+    if len(texto.strip()) < 40 or texto.count("(cid:") * 7 > len(texto) * 0.3:
+        raise ValueError("El PDF parece escaneado o ilegible; subí el Excel/CSV del resumen.")
     return texto
 
 def categorizar(desc):
@@ -338,33 +346,127 @@ def categorizar(desc):
         "MECANIC", "FILTRO", "ACEITE", "AUTOELEVADOR", "CUBIERTA")): return "MANTENIMIENTO"
     return "GASTO"
 
-def parsear_pdf_peajes(archivo):
-    texto = texto_pdf(archivo)
-    total_doc, prioridad = 0.0, 9
-    orden = {"TOTAL GRAVADO": 0, "SUBTOTAL": 1, "IMPORTE TOTAL": 2, "TOTAL": 3}
-    for m in RE_TOTAL.finditer(texto):
-        clave = re.sub(r"\s+", " ", m.group(1).upper())
-        p = orden.get(clave, 3); v = norm_monto(m.group(2))
-        if v > 0 and (p < prioridad or (p == prioridad and v > total_doc)):
-            total_doc, prioridad = v, p
-    m = RE_FECHA.search(texto)
-    fecha_doc = fmt_fecha(m.group(1)) if m else ""
-    items = []
+# --- Lector de facturas de peaje: un lector por emisor (ver docs/FORMATOS_PEAJE.md) ---
+# Dinero con dos estilos: coma argentina (40.000,00) o punto (9896.82). Siempre 2 decimales.
+_MONTO = r"(?:-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+[.,]\d{2})"
+RE_MONTO_PEAJE = re.compile(r"(?<![\d.,])(?:" + _MONTO + r")(?![\d.,]*\d)")
+RE_PASE_TAG = re.compile(r"\bSI(\d{8,14})(?:-[A-Z]{1,3})?\b")
+RE_PATENTE = re.compile(r"\b(?:[A-Z]{2}\d{3}[A-Z]{2}|[A-Z]{3}\d{3})\b")
+RE_CABECERA_DETALLE = re.compile(r"^\s*Cant(?:idad)?\b.*(?:Descripci[oó]n|Precio)", re.I)
+RE_FIN_DETALLE = re.compile(r"^\s*(Su saldo|TOTAL|CAE\b|Por falta|SUBTOTAL|Subtotal|Total s/|Comprobante|La presente|\*Redondeo|Esta Agencia|Vencimiento)", re.I)
+RE_SOLO_NUMEROS = re.compile(r"^[\d.,\s\-]*(?:Bs\.As\.|Total)?[\d.,\s\-]*$")
+
+# (nombre, texto del encabezado en mayusculas sin tildes, modo de lectura)
+EMISORES = [
+    ("AUSA", r"AUTOPISTAS URBANAS", "tag"),
+    ("AUSOL (Autopistas del Sol)", r"AUTOPISTAS DEL SOL", "tag_previo"),
+    ("AUBASA", r"AUTOPISTAS DE BUENOS AIRES|IMPRESO POR AUBASA", "tag"),
+    ("Autovia del Mercosur", r"AUTOVIA DEL MERCOSUR", "tag"),
+    ("GCO (Grupo Concesionario del Oeste)", r"GRUPO CONCESIONARIO DEL OESTE", "tag"),
+    ("CEAMSE (Oeste km 22)", r"C\.?E\.?A\.?M\.?S\.?E", "tag_previo"),
+    ("Caminos de las Sierras", r"CAMINOS DE LAS SIERRAS", "patente"),
+    ("AP01 Santa Fe", r"AUTOPISTA PROVINCIAL AP ?01|ESTANISLAO LOPEZ", "tag"),
+]
+
+def sin_tildes(t):
+    return "".join(c for c in unicodedata.normalize("NFD", t) if unicodedata.category(c) != "Mn")
+
+def norm_patente(v):
+    return re.sub(r"[^A-Z0-9]", "", str(v or "").upper())
+
+def detectar_emisor(texto):
+    cab = sin_tildes(texto[:2500]).upper()
+    for nombre, patron, modo in EMISORES:
+        if re.search(patron, cab): return nombre, modo
+    return None, "tag"
+
+def _fecha_doc(texto):
+    m = re.search(r"Fecha\s*:?\s*(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})", texto) or RE_FECHA.search(texto)
+    return fmt_fecha(m.group(1)) if m else ""
+
+def _neto_declarado(texto, emisor):
+    """Subtotal neto (sin IVA) que declara la factura: primera cifra de la fila de totales."""
+    neto = 0.0
     for linea in texto.split("\n"):
-        lu = linea.upper()
-        if any(p in lu for p in ("TOTAL", "SUBTOTAL", "IVA", "CUIT", "C.U.I.T", "SALDO", "VENCIMIENTO")):
+        if not RE_SOLO_NUMEROS.match(linea): continue
+        toks = RE_MONTO_PEAJE.findall(linea)
+        if len(toks) >= 4:
+            i = 2 if emisor == "Caminos de las Sierras" else 0   # Caminos: Total s/desc | descuento | Subtotal
+            neto = norm_monto(toks[i])
+    return neto
+
+def _limpiar_concepto(seg):
+    seg = re.sub(r"^\s*GASTOS ADMINISTRATIVOS\s+" + _MONTO + r"\s*", "", seg, flags=re.I)
+    seg = re.sub(r"^\s*\d+\s+", "", seg)
+    return re.sub(r"\s{2,}", " ", seg).strip(" -|$") or "Peaje"
+
+def parsear_factura_peajes(archivo):
+    """Lee una factura de peaje (PDF con texto). Devuelve dict: emisor, items, ajustes, neto, total_doc."""
+    return analizar_texto_peajes(texto_pdf(archivo))
+
+def analizar_texto_peajes(texto):
+    emisor, modo = detectar_emisor(texto)
+    fecha_doc = _fecha_doc(texto)
+    items, ajustes = [], []
+    en_detalle, tag_actual = False, None
+    for linea in texto.split("\n"):
+        if RE_CABECERA_DETALLE.match(linea):
+            en_detalle = True; continue
+        if en_detalle and RE_FIN_DETALLE.match(linea):
+            en_detalle = False; continue
+        if not en_detalle: continue
+        if modo == "patente":
+            m = re.match(r"^\s*(\d+)\s*-\s*([A-Z0-9]{6,7})\s*-\s*(.*?)\s+" + _MONTO + r"\s+\(\d+[.,]\d+\)\s+(" + _MONTO + r")\s*$", linea)
+            if m:
+                items.append({"fecha": fecha_doc, "tag": "", "patente": norm_patente(m.group(2)),
+                              "concepto": m.group(3)[:80], "monto": norm_monto(m.group(4)), "cantidad": int(m.group(1))})
             continue
-        tags = RE_TAG.findall(lu); montos = RE_MONTO.findall(linea)
-        if not tags or not montos: continue
-        tag = norm_tag(tags[0])
-        if len(tag) < 8: continue
-        monto = norm_monto(montos[-1])
-        if monto <= 0: continue
-        f = RE_FECHA.search(linea)
-        concepto = re.sub(r"\s{2,}", " ", RE_FECHA.sub("", RE_MONTO.sub("", RE_TAG.sub("", linea)))).strip(" -|$") or "Peaje"
-        items.append({"fecha": fmt_fecha(f.group(1)) if f else fecha_doc, "tag": tag,
-                      "concepto": concepto[:80], "monto": monto})
-    return items, total_doc
+        if modo == "tag_previo":
+            mt = re.match(r"^\s*SI(\d{8,14})\b", linea)
+            if mt:
+                tag_actual = norm_tag(mt.group(1)); continue
+            md = re.match(r"^\s*(\d+)\s+(.+?)\s+(" + _MONTO + r")\s*$", linea) or \
+                 re.match(r"^\s*()(GASTOS ADMINISTRATIVOS.*?)\s+(" + _MONTO + r")\s*$", linea, re.I)
+            if md:
+                monto = norm_monto(md.group(3))
+                if tag_actual and md.group(1):
+                    if monto != 0:
+                        items.append({"fecha": fecha_doc, "tag": tag_actual, "concepto": md.group(2)[:80],
+                                      "monto": monto, "cantidad": int(md.group(1))})
+                else:
+                    ajustes.append((md.group(2), monto))
+            continue
+        # modo "tag": el importe de cada pase es el numero que sigue a su TAG (hay varios pases por linea)
+        ms = list(RE_PASE_TAG.finditer(linea))
+        ini = 0
+        for k, mt in enumerate(ms):
+            resto = linea[mt.end():]
+            ma = re.match(r"\s*(" + _MONTO + r")(?![\d.,]*\d)", resto)
+            if not ma: continue
+            seg = linea[ini:mt.start()]
+            gm = re.match(r"^\s*GASTOS ADMINISTRATIVOS\s+(" + _MONTO + r")", seg, re.I)
+            if gm: ajustes.append(("GASTOS ADMINISTRATIVOS", norm_monto(gm.group(1))))
+            q = re.match(r"^\s*(?:GASTOS ADMINISTRATIVOS\s+" + _MONTO + r"\s*)?(\d+)\s", seg, re.I)
+            monto = norm_monto(ma.group(1))
+            ini = mt.end() + ma.end()
+            if monto == 0: continue
+            items.append({"fecha": fecha_doc, "tag": norm_tag(mt.group(1)), "concepto": _limpiar_concepto(seg)[:80],
+                          "monto": monto, "cantidad": int(q.group(1)) if q else 1})
+        if not ms:
+            ma = re.match(r"^\s*(?:\d+\s+)?([A-Za-zÁÉÍÓÚÑ][^\d]*?)\s+(" + _MONTO + r")\s*$", linea)
+            if ma and re.search(r"GASTOS|BONIF|DESC|AJUSTE|REDONDEO", ma.group(1), re.I):
+                ajustes.append((ma.group(1).strip(), norm_monto(ma.group(2))))
+    neto = _neto_declarado(texto, emisor)
+    # AUSA: el AJUSTE CONTRIBUCION ESPECIAL va como "No gravado", fuera del neto de pases.
+    aj = sum(m for n, m in ajustes if "CONTRIBUCION" not in n.upper())
+    return {"emisor": emisor, "items": items, "ajustes": ajustes, "neto": neto,
+            "total_doc": round(neto - aj, 2) if neto else 0.0}
+
+def parsear_pdf_peajes(archivo):
+    r = parsear_factura_peajes(archivo)
+    if not r["emisor"] and not r["items"]:
+        raise ValueError("no reconozco el emisor de este PDF (no es una factura de peaje conocida).")
+    return r["items"], r["total_doc"]
 
 def parsear_pdf_tarjeta(archivo):
     texto = texto_pdf(archivo)
@@ -404,8 +506,9 @@ def extraer_items_peajes(arch, contenido):
     if arch.filename.lower().endswith(".pdf"):
         return parsear_pdf_peajes(io.BytesIO(contenido))
     arch.seek(0)
-    filas = leer_filas(arch)
-    mapa, inicio = mapear_columnas(filas, ["fecha", "tag", "patente", "concepto", "monto"])
+    campos = ["fecha", "tag", "patente", "concepto", "monto"]
+    filas = leer_filas(arch, campos, "monto")
+    mapa, inicio = mapear_columnas(filas, campos)
     if not mapa or "monto" not in mapa:
         raise ValueError("no se detectaron las columnas (se necesita al menos IMPORTE/MONTO).")
     items = []
@@ -578,10 +681,12 @@ def importar():
         elif not items:
             flash("No se encontraron movimientos en el archivo.")
         else:
-            flota_map = {f["tag"]: f for f in d.execute("SELECT * FROM flota WHERE empresa_id=?", (emp(),))}
+            flota_rows = d.execute("SELECT * FROM flota WHERE empresa_id=?", (emp(),)).fetchall()
+            flota_map = {f["tag"]: f for f in flota_rows}
+            flota_pat = {norm_patente(f["patente"]): f for f in flota_rows if f["patente"]}
             nuevos, total = [], 0.0
-            for it in items:
-                m = flota_map.get(it["tag"])
+            for it in items:   # por TAG (ultimos 8 digitos); sin TAG (Caminos de las Sierras) por patente
+                m = flota_map.get(it["tag"]) if it["tag"] else flota_pat.get(norm_patente(it.get("patente")))
                 nuevos.append((emp(), it["fecha"], it["tag"], (m["patente"] if m else it.get("patente", "")),
                                it["concepto"], it["monto"], (m["dueno"] if m else ""),
                                (m["equipo"] if m else ""), 1 if m else 0, arch.filename, datetime.now().isoformat()))
@@ -605,13 +710,26 @@ def importar():
         WHERE m.empresa_id=? GROUP BY m.archivo ORDER BY MAX(m.id) DESC""", (emp(), emp())).fetchall()
     return render_template("importar.html", archivos=archivos, flota_n=flota_n)
 
+@app.route("/flota/plantilla")
+def flota_plantilla():
+    wb = Workbook(); ws = wb.active; ws.title = "Flota"
+    ws.append(["NUMERO DE TAG", "PATENTE", "RESPONSABLE", "EQUIPO", "ESTADO", "MARCA"])
+    ws.append(["94281610", "NTF780", "REQUIERE APROB GP", "EQUIPO 464", "ACTIVO", "IVECO"])
+    ws.append(["99694502", "AB120KT", "REQUIERE APROB WM", "EQUIPO 854", "ACTIVO", "MERCEDES BENZ"])
+    for col, ancho in zip("ABCDEF", (16, 12, 24, 14, 10, 18)):
+        ws.column_dimensions[col].width = ancho
+    b = io.BytesIO(); wb.save(b); b.seek(0)
+    return send_file(b, as_attachment=True, download_name="plantilla_flota.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
 @app.route("/flota", methods=["GET", "POST"])
 def flota():
     d = db()
     if request.method == "POST" and request.files.get("archivo"):
         try:
-            filas = leer_filas(request.files["archivo"])
-            mapa, inicio = mapear_columnas(filas, ["tag", "patente", "dueno", "equipo", "estado", "marca"])
+            campos = ["tag", "patente", "dueno", "equipo", "estado", "marca"]
+            filas = leer_filas(request.files["archivo"], campos, "tag")
+            mapa, inicio = mapear_columnas(filas, campos)
         except Exception as e:
             mapa, inicio, filas = None, 0, []
             flash(f"Error al leer: {e}")
@@ -644,8 +762,9 @@ def gastos():
             if arch.filename.lower().endswith(".pdf"):
                 meta, items = parsear_pdf_tarjeta(io.BytesIO(contenido))
             else:
-                arch.seek(0); filas = leer_filas(arch)
-                mapa, inicio = mapear_columnas(filas, ["fecha", "concepto", "monto"])
+                arch.seek(0); campos = ["fecha", "concepto", "monto"]
+                filas = leer_filas(arch, campos, "monto")
+                mapa, inicio = mapear_columnas(filas, campos)
                 if not mapa or "monto" not in mapa:
                     raise ValueError("no se detectaron columnas FECHA/DESCRIPCION/MONTO.")
                 items = []
@@ -659,7 +778,8 @@ def gastos():
                 meta = {"banco": "Excel", "titular": "", "periodo": "", "vencimiento": "-",
                         "total": sum(i["monto"] for i in items)}
             if not items:
-                raise ValueError("no se encontraron consumos en el resumen.")
+                raise ValueError("El PDF parece escaneado o ilegible; subí el Excel/CSV del resumen."
+                                 if arch.filename.lower().endswith(".pdf") else "no se encontraron consumos en el resumen.")
             cur = d.execute("""INSERT INTO resumenes(empresa_id,archivo,banco,titular,periodo,vencimiento,total_resumen,creado)
                 VALUES(?,?,?,?,?,?,?,?) RETURNING id""", (emp(), arch.filename, meta["banco"], meta["titular"], meta["periodo"],
                 meta["vencimiento"], meta["total"], datetime.now().isoformat()))

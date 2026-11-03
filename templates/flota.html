@@ -7,8 +7,10 @@
   <form class="linea" method="post" enctype="multipart/form-data"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <input type="file" name="archivo" accept=".xlsx,.csv" required>
     <button class="btn" type="submit">Actualizar base</button>
+    <a class="btn sec" href="/flota/plantilla">⬇ Descargar plantilla</a>
     <a class="btn sec" href="/importar">← Volver a importar</a>
   </form>
+  <p class="mini">Descargá la plantilla, cargá tus datos y subí el archivo.</p>
 </div>
 <div class="tarjeta">
   <h3 style="margin-bottom:12px">{{ unidades|length }} unidades</h3>

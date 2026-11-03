@@ -193,6 +193,18 @@ def test_flujo_completo_y_export_sin_formulas():
     assert c.get("/salir").status_code == 302
     assert c.get("/").status_code == 302
 
+def test_plantilla_flota():
+    c = logueado()
+    r = c.get("/flota/plantilla")
+    assert r.status_code == 200 and "attachment" in r.headers["Content-Disposition"]
+    assert "plantilla_flota.xlsx" in r.headers["Content-Disposition"]
+    ws = load_workbook(io.BytesIO(r.data)).active
+    assert [x.value for x in ws[1]] == ["NUMERO DE TAG", "PATENTE", "RESPONSABLE", "EQUIPO", "ESTADO", "MARCA"]
+    assert ws.max_row == 3
+    # la plantilla debe poder re-importarse tal cual
+    assert post(c, "/flota", {"archivo": (io.BytesIO(r.data), "p.xlsx")}, "/flota").status_code == 302
+    assert b"94281610" in c.get("/flota").data
+
 if __name__ == "__main__":
     fallos = 0
     for nombre, fn in list(globals().items()):
