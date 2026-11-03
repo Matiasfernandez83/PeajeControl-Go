@@ -5,38 +5,49 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ingreso · PeajeControl Go</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect width='48' height='48' rx='11' fill='%23E30613'/><rect x='6' y='23' width='19' height='11' rx='2' fill='white'/><path d='M25 25h6l5 5v4H25z' fill='white'/><rect x='24' y='14' width='2' height='11' fill='white'/><circle cx='14' cy='35.5' r='3' fill='%23111'/><circle cx='31' cy='35.5' r='3' fill='%23111'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+:root{--radio:12px;--radio-ch:8px;
+  --sombra:0 1px 2px rgba(20,20,20,.04), 0 8px 24px -12px rgba(20,20,20,.14)}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#141414;
-  min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
-.caja{background:#fff;border-radius:14px;padding:36px;width:100%;max-width:390px}
-.wm{display:flex;align-items:center;gap:11px;margin-bottom:18px}
+body{font-family:'Inter',system-ui,sans-serif;font-feature-settings:'tnum';background:#141414;color:#141414;
+  min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;-webkit-font-smoothing:antialiased}
+.caja{background:#fff;border:1px solid #e4e4e7;border-radius:var(--radio);box-shadow:var(--sombra);padding:32px;width:100%;max-width:400px}
+.wm{display:flex;align-items:center;gap:11px;margin-bottom:24px}
 .wm-ico{width:46px;height:46px;flex-shrink:0}
-.wm-stack{display:flex;flex-direction:column;line-height:.86;font-weight:800;color:#141414;letter-spacing:.4px}
+/* Marca: se conserva tal cual */
+.wm-stack{display:flex;flex-direction:column;line-height:.86;font-weight:800;color:#141414;letter-spacing:.4px;
+  font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif}
 .wm-stack div{font-size:22px}
 .wm-go{font-family:Georgia,'Times New Roman',serif;font-size:34px;font-weight:900;font-style:italic;
   color:#E30613;letter-spacing:-1px;line-height:.9}
 .wm-go b{font-size:24px;vertical-align:top;font-style:normal}
-h1{font-weight:900;letter-spacing:1px;font-size:20px}
-p{color:#71717a;font-size:13px;margin-bottom:22px}
-label{display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
-  color:#52525b;margin-bottom:6px}
-input{width:100%;padding:12px;border:1px solid #d4d4d8;border-radius:8px;font-size:14px;margin-bottom:16px}
-button{width:100%;background:#E30613;color:#fff;border:0;padding:13px;border-radius:8px;
-  font-weight:800;font-size:14px;cursor:pointer;text-transform:uppercase;letter-spacing:.5px}
+h1{font-weight:700;letter-spacing:-.02em;font-size:22px;margin-bottom:4px}
+p{color:#71717a;font-size:13.5px;margin-bottom:24px}
+label{display:block;font-size:13px;font-weight:500;color:#3f3f46;margin-bottom:6px}
+input{width:100%;height:40px;padding:0 12px;border:1px solid #d4d4d8;border-radius:var(--radio-ch);font-family:inherit;
+  font-size:14px;margin-bottom:16px;transition:border-color .15s,box-shadow .15s}
+input:focus{outline:0;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.2)}
+button{width:100%;height:40px;background:#E30613;color:#fff;border:0;border-radius:var(--radio-ch);
+  font-family:inherit;font-weight:600;font-size:14px;cursor:pointer;margin-top:4px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.15);transition:background .15s}
 button:hover{background:#c00511}
-.err{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:8px;padding:11px;
+button:focus-visible{outline:0;box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 0 0 3px rgba(227,6,19,.25)}
+.err{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:var(--radio-ch);padding:11px 12px;
   font-size:13px;margin-bottom:16px}
 .clave-wrap{position:relative;width:100%}
 div.clave-wrap input{padding-right:44px;margin:0}
 .clave-wrap{margin-bottom:16px}
 button.ojo{position:absolute;top:0;right:0;bottom:0;width:42px;height:auto;padding:0;margin:0;background:transparent;
-  border:0;border-radius:0 8px 8px 0;color:#71717a;cursor:pointer;display:flex;align-items:center;justify-content:center;
-  text-transform:none;letter-spacing:0}
-button.ojo:hover,button.ojo:focus-visible{background:transparent;color:#E30613}
+  border:0;border-radius:0 var(--radio-ch) var(--radio-ch) 0;color:#71717a;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  box-shadow:none}
+button.ojo:hover,button.ojo:focus-visible{background:transparent;color:#E30613;box-shadow:none;outline:0}
 button.ojo svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 button.ojo .o-cerrado,button.ojo.ver .o-abierto{display:none}
 button.ojo.ver .o-cerrado{display:block}
+@media(max-width:480px){.caja{padding:24px 20px}input,button{height:44px}input{font-size:16px}}
 </style>
 </head>
 <body>

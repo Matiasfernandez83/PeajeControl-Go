@@ -1,39 +1,40 @@
 {% extends "base.html" %}
+{% from "_vacio.html" import vacio %}
 {% block cuerpo %}
-<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;margin-bottom:8px">
+<div class="pagina-cab">
   <div>
-    <h1 style="margin-bottom:2px">Empresas</h1>
-    <p class="mini">Panel de la plataforma · cada empresa ve únicamente sus propios datos.</p>
+    <h1>Empresas</h1>
+    <p class="sub">Panel de la plataforma · cada empresa ve únicamente sus propios datos.</p>
   </div>
-  <div class="tarjeta oscura" style="margin:0;min-width:200px;display:flex;align-items:center;gap:14px">
-    <div style="width:44px;height:44px;background:rgba(223,255,0,.2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px">🏢</div>
+  <div class="tarjeta oscura stat-oscuro" style="margin:0;min-width:200px">
+    <div class="ic-box ac-lima"><svg class="i"><use href="#i-empresa"/></svg></div>
     <div>
-      <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;font-weight:800">Empresas activas</div>
-      <div style="font-size:24px;font-weight:900;color:var(--lima)">{{ empresas|length }}</div>
+      <div class="etiqueta">Empresas activas</div>
+      <div class="valor">{{ empresas|length }}</div>
     </div>
   </div>
 </div>
 
-<div class="dos" style="grid-template-columns:1fr 1fr">
+<div class="dos">
   <div class="tarjeta">
-    <h3 style="margin-bottom:4px">➕ Alta de empresa cliente</h3>
-    <p class="mini">Se crea la empresa y su usuario administrador. Ese admin entra con su email y clave y solo ve los datos de su empresa.</p>
+    <h3 class="con-icono"><svg class="i"><use href="#i-mas"/></svg>Alta de empresa cliente</h3>
+    <p class="mini" style="margin-top:6px">Se crea la empresa y su usuario administrador. Ese admin entra con su email y clave y solo ve los datos de su empresa.</p>
     <form method="post" action="/empresas/crear"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-      <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#52525b">Nombre de la empresa</label>
-      <input type="text" name="empresa" required placeholder="Transportes del Sur SA" style="margin:6px 0 12px">
-      <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#52525b">Nombre del administrador</label>
-      <input type="text" name="nombre" placeholder="Juan Pérez" style="margin:6px 0 12px">
-      <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#52525b">Email del administrador</label>
-      <input type="email" name="email" required placeholder="admin@empresa.com" style="margin:6px 0 12px">
-      <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#52525b">Clave inicial (mín. 6)</label>
-      <div class="clave-wrap" style="margin:6px 0 14px"><input type="password" name="clave" required>{% include "_ojo.html" %}</div>
+      <div class="campo"><label>Nombre de la empresa</label>
+        <input type="text" name="empresa" required placeholder="Transportes del Sur SA"></div>
+      <div class="campo"><label>Nombre del administrador</label>
+        <input type="text" name="nombre" placeholder="Juan Pérez"></div>
+      <div class="campo"><label>Email del administrador</label>
+        <input type="email" name="email" required placeholder="admin@empresa.com"></div>
+      <div class="campo"><label>Clave inicial (mín. 6)</label>
+        <div class="clave-wrap"><input type="password" name="clave" required>{% include "_ojo.html" %}</div></div>
       <button class="btn" type="submit">Crear empresa</button>
     </form>
   </div>
 
   <div class="tarjeta">
-    <h3 style="margin-bottom:14px">Empresas registradas</h3>
-    <div style="overflow-x:auto">
+    <h3 style="margin-bottom:16px">Empresas registradas</h3>
+    <div class="tabla-wrap">
     <table>
       <tr><th>Empresa</th><th class="num">Usuarios</th><th class="num">Flota</th><th class="num">Movs.</th><th class="ocultar-mov">Alta</th><th></th></tr>
       {% for e in empresas %}
@@ -42,18 +43,18 @@
         <td class="num">{{ e.usuarios }}</td>
         <td class="num">{{ e.flota }}</td>
         <td class="num">{{ e.movimientos }}</td>
-        <td class="ocultar-mov" style="color:#a1a1aa">{{ e.creado }}</td>
+        <td class="ocultar-mov tenue">{{ e.creado }}</td>
         <td class="num">
           {% if e.id == session.empresa_id %}
-          <span class="mini">(vos)</span>
+          <span class="mini" style="margin:0">(vos)</span>
           {% else %}
           <form method="post" action="/empresas/borrar/{{ e.id }}" onsubmit="return confirm('¿Eliminar la empresa «{{ e.nombre }}» y TODOS sus datos (flota, movimientos, gastos y usuarios)? Esta acción no se puede deshacer.')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-            <button class="btn chico sec" type="submit">Eliminar</button>
+            <button class="btn chico gh" type="submit"><svg class="i"><use href="#i-papelera"/></svg>Eliminar</button>
           </form>
           {% endif %}
         </td>
       </tr>
-      {% else %}<tr><td colspan="6" class="vacio">Todavía no hay empresas cargadas.</td></tr>{% endfor %}
+      {% else %}<tr><td colspan="6" class="td-vacio">{{ vacio('empresa', 'Todavía no hay empresas', 'Dá de alta la primera con el formulario.') }}</td></tr>{% endfor %}
     </table>
     </div>
   </div>

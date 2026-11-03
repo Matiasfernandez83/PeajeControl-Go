@@ -1,0 +1,3 @@
+{% macro vacio(icono, titulo, ayuda='') -%}
+<div class="vacio"><svg class="i"><use href="#i-{{ icono }}"/></svg><b>{{ titulo }}</b>{% if ayuda %}<span>{{ ayuda }}</span>{% endif %}</div>
+{%- endmacro %}
