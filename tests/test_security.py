@@ -205,6 +205,46 @@ def test_plantilla_flota():
     assert post(c, "/flota", {"archivo": (io.BytesIO(r.data), "p.xlsx")}, "/flota").status_code == 302
     assert b"94281610" in c.get("/flota").data
 
+def test_carga_multiple_peajes():
+    c = logueado()
+    tok = token(c, "/importar")
+    def f(nombre, filas): return (xlsx(filas), nombre)
+    data = {"_csrf": tok, "archivo": [
+        f("multi_a.xlsx", [["FECHA", "TAG", "CONCEPTO", "IMPORTE"], ["01/10/2026", "1111111111111111", "Peaje A", "100,00"],
+                           ["02/10/2026", "1111111111111111", "Peaje A2", "50,00"]]),
+        (io.BytesIO(b"esto no es un pdf"), "roto.pdf"),          # falla, no debe cortar a los demas
+        f("multi_b.xlsx", [["FECHA", "TAG", "CONCEPTO", "IMPORTE"], ["03/10/2026", "2222222222222222", "Peaje B", "70,00"]])]}
+    r = c.post("/importar", data=data, content_type="multipart/form-data", follow_redirects=True)
+    html = r.get_data(as_text=True)
+    assert "multi_a.xlsx" in html and "2 pasadas" in html, "falta resumen de multi_a"
+    assert "multi_b.xlsx" in html and "1 pasadas" in html, "falta resumen de multi_b"
+    assert "roto.pdf" in html and "✖" in html, "falta el error del archivo roto"
+    movs = c.get("/movimientos").get_data(as_text=True)
+    assert "11111111" in movs and "22222222" in movs
+    # un solo archivo sigue andando
+    r = c.post("/importar", data={"_csrf": token(c, "/importar"), "archivo": f("solo.xlsx",
+        [["FECHA", "TAG", "CONCEPTO", "IMPORTE"], ["04/10/2026", "3333333333333333", "Peaje C", "10,00"]])},
+        content_type="multipart/form-data", follow_redirects=True)
+    assert "solo.xlsx" in r.get_data(as_text=True) and "1 pasadas" in r.get_data(as_text=True)
+
+def test_carga_multiple_tope():
+    c = logueado()
+    archivos = [(xlsx([["FECHA", "TAG", "CONCEPTO", "IMPORTE"], ["01/10/2026", "444444444444444%d" % (i % 10), "Tope", "1,00"]]), f"tope{i}.xlsx")
+                for i in range(A.MAX_ARCHIVOS_CARGA + 2)]
+    r = c.post("/importar", data={"_csrf": token(c, "/importar"), "archivo": archivos},
+               content_type="multipart/form-data", follow_redirects=True)
+    html = r.get_data(as_text=True)
+    assert f"tope{A.MAX_ARCHIVOS_CARGA - 1}.xlsx" in html and f"tope{A.MAX_ARCHIVOS_CARGA}.xlsx" not in html
+    assert "quedaron sin procesar 2" in html
+
+def test_carga_multiple_resumenes():
+    c = logueado()
+    def f(n): return (xlsx([["FECHA", "DESCRIPCION", "MONTO"], ["01/10/2026", "SHELL combustible", "1.000,00"]]), n)
+    r = c.post("/gastos", data={"_csrf": token(c, "/gastos"), "archivo": [f("r1.xlsx"), f("r2.xlsx")]},
+               content_type="multipart/form-data", follow_redirects=True)
+    html = r.get_data(as_text=True)
+    assert "r1.xlsx" in html and "r2.xlsx" in html and html.count("1 consumos") >= 2
+
 if __name__ == "__main__":
     fallos = 0
     for nombre, fn in list(globals().items()):

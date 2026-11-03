@@ -10,8 +10,9 @@
     <form method="post" enctype="multipart/form-data"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <div style="border:2px dashed #d4d4d8;border-radius:12px;padding:30px;text-align:center;background:#fafafa;margin-bottom:14px">
         <div style="font-size:40px">📄</div>
-        <p style="font-weight:700;margin:8px 0">Seleccioná facturas AUSA o resúmenes</p>
-        <input type="file" name="archivo" accept=".pdf,.xlsx,.csv" required style="margin-top:8px">
+        <p style="font-weight:700;margin:8px 0">Seleccioná una o varias facturas</p>
+        <input type="file" name="archivo" accept=".pdf,.xlsx,.csv" multiple required style="margin-top:8px">
+        <p class="mini" style="margin-top:6px">Podés elegir varios archivos a la vez (hasta 15).</p>
       </div>
       <button class="btn" type="submit">Iniciar procesamiento</button>
     </form>

@@ -14,7 +14,7 @@ if not app.secret_key:
     app.secret_key = secrets.token_hex(32)
     print("ADVERTENCIA: falta la variable SECRET_KEY; se usa una clave aleatoria "
           "(las sesiones se pierden al reiniciar). Definila en el entorno.")
-app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024  # tope de subida: 25 MB
+app.config["MAX_CONTENT_LENGTH"] = 60 * 1024 * 1024  # tope de subida por request (varios archivos): 60 MB
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                   SESSION_COOKIE_SECURE=IN_PROD,
                   PERMANENT_SESSION_LIFETIME=timedelta(hours=8))
@@ -203,6 +203,15 @@ def migrar(con):
     # Indices por empresa (se crean recien aca, ya con la columna presente).
     con.execute("CREATE INDEX IF NOT EXISTS idx_mov_emp ON movimientos(empresa_id)")
     con.execute("CREATE INDEX IF NOT EXISTS idx_arch_emp ON archivos(empresa_id, nombre)")
+    # Indices para las pantallas pesadas (filtros por empresa + orden/agrupacion). Compatibles con SQLite y Postgres.
+    for ddl in ("idx_mov_emp_id ON movimientos(empresa_id, id)",
+                "idx_mov_emp_patente ON movimientos(empresa_id, patente)",
+                "idx_flota_emp_tag ON flota(empresa_id, tag)",
+                "idx_gastos_emp ON gastos(empresa_id, id)",
+                "idx_gastos_resumen ON gastos(resumen_id)",
+                "idx_res_emp ON resumenes(empresa_id)",
+                "idx_usr_emp ON usuarios(empresa_id)"):
+        con.execute("CREATE INDEX IF NOT EXISTS " + ddl)
 
 def init_db():
     con = _conectar()
@@ -466,7 +475,7 @@ def parsear_pdf_peajes(archivo):
     r = parsear_factura_peajes(archivo)
     if not r["emisor"] and not r["items"]:
         raise ValueError("no reconozco el emisor de este PDF (no es una factura de peaje conocida).")
-    return r["items"], r["total_doc"]
+    return r["items"], r["total_doc"], r["emisor"]
 
 def parsear_pdf_tarjeta(archivo):
     texto = texto_pdf(archivo)
@@ -519,7 +528,7 @@ def extraer_items_peajes(arch, contenido):
         items.append({"fecha": fmt_fecha(get("fecha")), "tag": norm_tag(get("tag")),
                       "patente": str(get("patente") or "").strip().upper(),
                       "concepto": str(get("concepto") or "Peaje").strip(), "monto": monto})
-    return items, 0.0
+    return items, 0.0, "Excel/CSV"
 
 def guardar_archivo(nombre, tipo, total_doc, contenido, mime):
     b64 = base64.b64encode(contenido).decode() if contenido else ""
@@ -665,44 +674,65 @@ def borrar_movimientos():
     return redirect(request.referrer or "/movimientos")
 
 # ================= 2) IMPORTAR =================
+MAX_ARCHIVOS_CARGA = 15   # tope de archivos por carga multiple
+
+def procesar_peaje(arch, flota_map, flota_pat):
+    """Procesa UN archivo de peajes. Devuelve el resumen: archivo, emisor, pasadas, estado, mensaje."""
+    r = {"archivo": arch.filename, "emisor": "", "pasadas": 0, "estado": "error", "mensaje": ""}
+    try:
+        contenido = arch.read()
+        items, total_doc, r["emisor"] = extraer_items_peajes(arch, contenido)
+    except Exception as e:
+        r["mensaje"] = str(e); return r
+    if not items:
+        r["mensaje"] = ("sin movimientos (si es un PDF escaneado, subi el Excel/CSV)"
+                        if arch.filename.lower().endswith(".pdf") else "sin movimientos")
+        return r
+    nuevos, total = [], 0.0
+    for it in items:   # por TAG (ultimos 8 digitos); sin TAG (Caminos de las Sierras) por patente
+        m = flota_map.get(it["tag"]) if it["tag"] else flota_pat.get(norm_patente(it.get("patente")))
+        nuevos.append((emp(), it["fecha"], it["tag"], (m["patente"] if m else it.get("patente", "")),
+                       it["concepto"], it["monto"], (m["dueno"] if m else ""),
+                       (m["equipo"] if m else ""), 1 if m else 0, arch.filename, datetime.now().isoformat()))
+        total += it["monto"]
+    d = db()
+    d.executemany("""INSERT INTO movimientos(empresa_id,fecha,tag,patente,concepto,monto,
+        dueno,equipo,verificado,archivo,creado) VALUES(?,?,?,?,?,?,?,?,?,?,?)""", nuevos)
+    mime = "application/pdf" if arch.filename.lower().endswith(".pdf") else "application/vnd.ms-excel"
+    guardar_archivo(arch.filename, "Peajes", total_doc, contenido, mime)
+    d.commit()
+    ok = sum(1 for n in nuevos if n[8])
+    r["pasadas"] = len(nuevos)
+    r["mensaje"] = f"{len(nuevos)} pasadas ({pesos(total)}), verificadas {ok}."
+    if not total_doc:
+        r["estado"] = "sin_control"
+    elif abs(total_doc - total) < 1:
+        r["estado"] = "ok"; r["mensaje"] += f" Control OK ({pesos(total_doc)})."
+    else:
+        r["estado"] = "diferencia"
+        r["mensaje"] += f" Documento declara {pesos(total_doc)}, diferencia {pesos(abs(total_doc - total))}."
+    return r
+
 @app.route("/importar", methods=["GET", "POST"])
 def importar():
     d = db()
-    if request.method == "POST" and request.files.get("archivo"):
-        arch = request.files["archivo"]
-        contenido = arch.read()
-        items, total_doc, error = [], 0.0, None
-        try:
-            items, total_doc = extraer_items_peajes(arch, contenido)
-        except Exception as e:
-            error = str(e)
-        if error:
-            flash(f"Error al procesar: {error}")
-        elif not items:
-            flash("No se encontraron movimientos en el archivo.")
-        else:
-            flota_rows = d.execute("SELECT * FROM flota WHERE empresa_id=?", (emp(),)).fetchall()
-            flota_map = {f["tag"]: f for f in flota_rows}
-            flota_pat = {norm_patente(f["patente"]): f for f in flota_rows if f["patente"]}
-            nuevos, total = [], 0.0
-            for it in items:   # por TAG (ultimos 8 digitos); sin TAG (Caminos de las Sierras) por patente
-                m = flota_map.get(it["tag"]) if it["tag"] else flota_pat.get(norm_patente(it.get("patente")))
-                nuevos.append((emp(), it["fecha"], it["tag"], (m["patente"] if m else it.get("patente", "")),
-                               it["concepto"], it["monto"], (m["dueno"] if m else ""),
-                               (m["equipo"] if m else ""), 1 if m else 0, arch.filename, datetime.now().isoformat()))
-                total += it["monto"]
-            d.executemany("""INSERT INTO movimientos(empresa_id,fecha,tag,patente,concepto,monto,
-                dueno,equipo,verificado,archivo,creado) VALUES(?,?,?,?,?,?,?,?,?,?,?)""", nuevos)
-            mime = "application/pdf" if arch.filename.lower().endswith(".pdf") else "application/vnd.ms-excel"
-            guardar_archivo(arch.filename, "Peajes", total_doc, contenido, mime)
-            d.commit()
-            ok = sum(1 for n in nuevos if n[8])
-            msg = f"Importados {len(nuevos)} movimientos ({pesos(total)}). Verificados: {ok}."
-            if total_doc:
-                dif = abs(total_doc - total)
-                msg += (f" ✔ Control OK ({pesos(total_doc)})." if dif < 1
-                        else f" ⚠ Documento declara {pesos(total_doc)}, diferencia {pesos(dif)}.")
-            flash(msg)
+    if request.method == "POST":
+        archivos = [a for a in request.files.getlist("archivo") if a and a.filename]
+        if not archivos:
+            flash("Elegi al menos un archivo.")
+            return redirect("/importar")
+        omitidos = archivos[MAX_ARCHIVOS_CARGA:]
+        archivos = archivos[:MAX_ARCHIVOS_CARGA]
+        flota_rows = d.execute("SELECT * FROM flota WHERE empresa_id=?", (emp(),)).fetchall()   # una sola vez
+        flota_map = {f["tag"]: f for f in flota_rows}
+        flota_pat = {norm_patente(f["patente"]): f for f in flota_rows if f["patente"]}
+        iconos = {"ok": "✔", "sin_control": "✔", "diferencia": "⚠", "error": "✖"}
+        for a in archivos:   # si un archivo falla, los demas igual se procesan
+            r = procesar_peaje(a, flota_map, flota_pat)
+            emisor = f" [{r['emisor']}]" if r["emisor"] else ""
+            flash(f"{iconos[r['estado']]} {r['archivo']}{emisor}: {r['mensaje']}")
+        if omitidos:
+            flash(f"⚠ Se procesaron los primeros {MAX_ARCHIVOS_CARGA} archivos; quedaron sin procesar {len(omitidos)}.")
         return redirect("/importar")
     flota_n = d.execute("SELECT COUNT(*) n FROM flota WHERE empresa_id=?", (emp(),)).fetchone()["n"]
     archivos = d.execute("""SELECT m.archivo, COUNT(*) n, SUM(m.monto) t, COALESCE(MAX(a.total_doc),0) td
@@ -752,46 +782,59 @@ def flota():
     return render_template("flota.html", unidades=unidades)
 
 # ================= 3) GASTOS TARJETAS =================
+def procesar_resumen(arch):
+    """Procesa UN resumen de tarjeta. Devuelve (ok, mensaje); nunca corta la carga de los demas."""
+    d = db()
+    try:
+        contenido = arch.read()
+        if arch.filename.lower().endswith(".pdf"):
+            meta, items = parsear_pdf_tarjeta(io.BytesIO(contenido))
+        else:
+            arch.seek(0); campos = ["fecha", "concepto", "monto"]
+            filas = leer_filas(arch, campos, "monto")
+            mapa, inicio = mapear_columnas(filas, campos)
+            if not mapa or "monto" not in mapa:
+                raise ValueError("no se detectaron columnas FECHA/DESCRIPCION/MONTO.")
+            items = []
+            for fila in filas[inicio:]:
+                get = lambda c: fila[mapa[c]] if c in mapa and mapa[c] < len(fila) else ""
+                monto = norm_monto(get("monto"))
+                if monto == 0: continue
+                desc = str(get("concepto") or "").strip()
+                items.append({"fecha": fmt_fecha(get("fecha")), "concepto": desc,
+                              "categoria": categorizar(desc), "monto": monto})
+            meta = {"banco": "Excel", "titular": "", "periodo": "", "vencimiento": "-",
+                    "total": sum(i["monto"] for i in items)}
+        if not items:
+            raise ValueError("El PDF parece escaneado o ilegible; subí el Excel/CSV del resumen."
+                             if arch.filename.lower().endswith(".pdf") else "no se encontraron consumos en el resumen.")
+        cur = d.execute("""INSERT INTO resumenes(empresa_id,archivo,banco,titular,periodo,vencimiento,total_resumen,creado)
+            VALUES(?,?,?,?,?,?,?,?) RETURNING id""", (emp(), arch.filename, meta["banco"], meta["titular"], meta["periodo"],
+            meta["vencimiento"], meta["total"], datetime.now().isoformat()))
+        rid = cur.fetchone()["id"]
+        d.executemany("INSERT INTO gastos(empresa_id,resumen_id,fecha,concepto,categoria,monto) VALUES(?,?,?,?,?,?)",
+                      [(emp(), rid, i["fecha"], i["concepto"], i["categoria"], i["monto"]) for i in items])
+        mime = "application/pdf" if arch.filename.lower().endswith(".pdf") else "application/vnd.ms-excel"
+        guardar_archivo(arch.filename, "Resumen tarjeta", meta["total"], contenido, mime)
+        d.commit()
+        return True, f"{arch.filename}: resumen {meta['banco']} procesado, {len(items)} consumos, total {pesos(meta['total'])}."
+    except Exception as e:
+        d.rollback()
+        return False, f"{arch.filename}: {e}"
+
 @app.route("/gastos", methods=["GET", "POST"])
 def gastos():
     d = db()
-    if request.method == "POST" and request.files.get("archivo"):
-        arch = request.files["archivo"]
-        contenido = arch.read()
-        try:
-            if arch.filename.lower().endswith(".pdf"):
-                meta, items = parsear_pdf_tarjeta(io.BytesIO(contenido))
-            else:
-                arch.seek(0); campos = ["fecha", "concepto", "monto"]
-                filas = leer_filas(arch, campos, "monto")
-                mapa, inicio = mapear_columnas(filas, campos)
-                if not mapa or "monto" not in mapa:
-                    raise ValueError("no se detectaron columnas FECHA/DESCRIPCION/MONTO.")
-                items = []
-                for fila in filas[inicio:]:
-                    get = lambda c: fila[mapa[c]] if c in mapa and mapa[c] < len(fila) else ""
-                    monto = norm_monto(get("monto"))
-                    if monto == 0: continue
-                    desc = str(get("concepto") or "").strip()
-                    items.append({"fecha": fmt_fecha(get("fecha")), "concepto": desc,
-                                  "categoria": categorizar(desc), "monto": monto})
-                meta = {"banco": "Excel", "titular": "", "periodo": "", "vencimiento": "-",
-                        "total": sum(i["monto"] for i in items)}
-            if not items:
-                raise ValueError("El PDF parece escaneado o ilegible; subí el Excel/CSV del resumen."
-                                 if arch.filename.lower().endswith(".pdf") else "no se encontraron consumos en el resumen.")
-            cur = d.execute("""INSERT INTO resumenes(empresa_id,archivo,banco,titular,periodo,vencimiento,total_resumen,creado)
-                VALUES(?,?,?,?,?,?,?,?) RETURNING id""", (emp(), arch.filename, meta["banco"], meta["titular"], meta["periodo"],
-                meta["vencimiento"], meta["total"], datetime.now().isoformat()))
-            rid = cur.fetchone()["id"]
-            d.executemany("INSERT INTO gastos(empresa_id,resumen_id,fecha,concepto,categoria,monto) VALUES(?,?,?,?,?,?)",
-                          [(emp(), rid, i["fecha"], i["concepto"], i["categoria"], i["monto"]) for i in items])
-            mime = "application/pdf" if arch.filename.lower().endswith(".pdf") else "application/vnd.ms-excel"
-            guardar_archivo(arch.filename, "Resumen tarjeta", meta["total"], contenido, mime)
-            d.commit()
-            flash(f"Resumen {meta['banco']} procesado: {len(items)} consumos, total {pesos(meta['total'])}.")
-        except Exception as e:
-            flash(f"Error al procesar: {e}")
+    if request.method == "POST":
+        archivos = [a for a in request.files.getlist("archivo") if a and a.filename]
+        if not archivos:
+            flash("Elegi al menos un archivo.")
+            return redirect("/gastos")
+        for a in archivos[:MAX_ARCHIVOS_CARGA]:
+            ok, msg = procesar_resumen(a)
+            flash(("✔ " if ok else "✖ ") + msg)
+        if len(archivos) > MAX_ARCHIVOS_CARGA:
+            flash(f"⚠ Se procesaron los primeros {MAX_ARCHIVOS_CARGA} archivos; quedaron sin procesar {len(archivos) - MAX_ARCHIVOS_CARGA}.")
         return redirect("/gastos")
     E = emp()
     resumenes = d.execute("""SELECT r.*, COUNT(g.id) n, COALESCE(SUM(g.monto),0) suma,
