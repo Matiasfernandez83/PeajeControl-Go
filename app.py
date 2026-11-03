@@ -710,6 +710,18 @@ def importar():
         WHERE m.empresa_id=? GROUP BY m.archivo ORDER BY MAX(m.id) DESC""", (emp(), emp())).fetchall()
     return render_template("importar.html", archivos=archivos, flota_n=flota_n)
 
+@app.route("/flota/plantilla")
+def flota_plantilla():
+    wb = Workbook(); ws = wb.active; ws.title = "Flota"
+    ws.append(["NUMERO DE TAG", "PATENTE", "RESPONSABLE", "EQUIPO", "ESTADO", "MARCA"])
+    ws.append(["94281610", "NTF780", "REQUIERE APROB GP", "EQUIPO 464", "ACTIVO", "IVECO"])
+    ws.append(["99694502", "AB120KT", "REQUIERE APROB WM", "EQUIPO 854", "ACTIVO", "MERCEDES BENZ"])
+    for col, ancho in zip("ABCDEF", (16, 12, 24, 14, 10, 18)):
+        ws.column_dimensions[col].width = ancho
+    b = io.BytesIO(); wb.save(b); b.seek(0)
+    return send_file(b, as_attachment=True, download_name="plantilla_flota.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
 @app.route("/flota", methods=["GET", "POST"])
 def flota():
     d = db()
