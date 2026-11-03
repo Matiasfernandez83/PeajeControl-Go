@@ -1,15 +1,16 @@
 {% extends "base.html" %}
+{% from "_vacio.html" import vacio %}
 {% block cuerpo %}
 <h1>Movimientos</h1>
 <div class="tabs">
   <a href="/movimientos" class="{{ 'act' if vista=='detalle' }}">Detalle</a>
-  <a href="/movimientos?vista=vehiculo" class="{{ 'act' if vista=='vehiculo' }}">x Vehículo</a>
-  <a href="/movimientos?vista=responsable" class="{{ 'act' if vista=='responsable' }}">x Responsable</a>
+  <a href="/movimientos?vista=vehiculo" class="{{ 'act' if vista=='vehiculo' }}">Por vehículo</a>
+  <a href="/movimientos?vista=responsable" class="{{ 'act' if vista=='responsable' }}">Por responsable</a>
 </div>
 
 {% if vista != 'detalle' %}
 <div class="tarjeta">
-  <div style="overflow-x:auto">
+  <div class="tabla-wrap">
   <table>
     <tr><th>{{ etiqueta }}</th><th class="num">Operaciones</th><th class="num">{{ 'Patentes' if vista=='responsable' else 'Responsable' }}</th><th class="num">Total</th></tr>
     {% for g in grupos %}
@@ -17,52 +18,52 @@
       <td><b>{{ g.g }}</b></td><td class="num">{{ g.n }}</td>
       <td class="num">{{ g.sub }}</td><td class="num">{{ g.t|pesos }}</td>
     </tr>
-    {% else %}<tr><td colspan="4" class="vacio">Sin datos.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="4" class="td-vacio">{{ vacio('bandeja', 'Sin datos') }}</td></tr>{% endfor %}
   </table>
   </div>
 </div>
 {% else %}
 <div class="tarjeta">
-  <form class="linea" method="get" style="margin-bottom:12px">
+  <form class="linea" method="get" style="margin-bottom:16px">
     <input type="text" name="q" value="{{ qtext }}" placeholder="Buscar patente, tag, equipo, responsable..." style="max-width:340px">
     {% if dueno %}<input type="hidden" name="dueno" value="{{ dueno }}">{% endif %}
     {% if filtro %}<input type="hidden" name="filtro" value="{{ filtro }}">{% endif %}
-    <button class="btn chico" type="submit">Buscar</button>
-    <a class="btn chico lima" href="/exportar">Excel</a>
+    <button class="btn chico" type="submit"><svg class="i"><use href="#i-buscar"/></svg>Buscar</button>
+    <a class="btn chico lima" href="/exportar"><svg class="i"><use href="#i-excel"/></svg>Excel</a>
   </form>
   {% set qs = ('&q=' ~ qtext|urlencode if qtext else '') ~ ('&dueno=' ~ dueno|urlencode if dueno else '') %}
-  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px">
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
+  <div class="cab-tarjeta">
+    <div class="acciones">
       <a class="btn chico {{ 'sec' if not filtro else 'gh' }}" href="/movimientos?filtro={{ qs }}">Todos</a>
-      <a class="btn chico {{ 'sec' if filtro=='verificado' else 'gh' }}" href="/movimientos?filtro=verificado{{ qs }}">✔ Verificados</a>
-      <a class="btn chico {{ 'sec' if filtro=='sinmatch' else 'gh' }}" href="/movimientos?filtro=sinmatch{{ qs }}">⚠ Sin match</a>
+      <a class="btn chico {{ 'sec' if filtro=='verificado' else 'gh' }}" href="/movimientos?filtro=verificado{{ qs }}"><svg class="i"><use href="#i-check"/></svg>Verificados</a>
+      <a class="btn chico {{ 'sec' if filtro=='sinmatch' else 'gh' }}" href="/movimientos?filtro=sinmatch{{ qs }}"><svg class="i"><use href="#i-alerta"/></svg>Sin control</a>
     </div>
-    <div style="display:flex;gap:22px;align-items:baseline">
-      <div><span style="font-size:20px;font-weight:900">{{ resumen.n }}</span> <span class="mini">registros</span></div>
-      <div><span style="font-size:20px;font-weight:900;color:var(--rojo)">{{ resumen.t|pesos }}</span> <span class="mini">total del filtro</span></div>
+    <div class="acciones" style="gap:24px;align-items:baseline">
+      <div><span class="dato">{{ resumen.n }}</span> <span class="mini" style="margin:0">registros</span></div>
+      <div><span class="dato" style="color:var(--rojo)">{{ resumen.t|pesos }}</span> <span class="mini" style="margin:0">total del filtro</span></div>
     </div>
   </div>
   <form method="post" action="/movimientos/borrar" onsubmit="return confirm('¿Eliminar los movimientos seleccionados?')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-  <div style="overflow-x:auto">
+  <div class="tabla-wrap">
   <table>
     <tr>
-      <th style="width:30px"><input type="checkbox" onclick="document.querySelectorAll('.chk').forEach(c=>c.checked=this.checked)"></th>
+      <th style="width:30px"><input type="checkbox" aria-label="Seleccionar todos" onclick="document.querySelectorAll('.chk').forEach(c=>c.checked=this.checked)"></th>
       <th>Fecha</th><th>Patente</th><th class="ocultar-mov">Equipo</th><th>Responsable</th><th>TAG</th><th>Control</th><th class="num">Monto</th>
     </tr>
     {% for m in movs %}
     <tr>
       <td><input type="checkbox" class="chk" name="ids" value="{{ m.id }}"></td>
-      <td>{{ m.fecha }}</td><td>{{ m.patente }}</td><td class="ocultar-mov">{{ m.equipo }}</td>
-      <td>{{ m.dueno }}</td><td>{{ m.tag }}</td>
-      <td class="{{ 'ok' if m.verificado else 'no' }}">{{ '✔' if m.verificado else '—' }}</td>
+      <td>{{ m.fecha }}</td><td class="mono">{{ m.patente }}</td><td class="ocultar-mov">{{ m.equipo }}</td>
+      <td>{{ m.dueno }}</td><td class="mono">{{ m.tag }}</td>
+      <td><span class="pill {{ 'ok' if m.verificado else 'sin' }}">{{ 'Verificado' if m.verificado else 'Sin control' }}</span></td>
       <td class="num">{{ m.monto|pesos }}</td>
     </tr>
-    {% else %}<tr><td colspan="8" class="vacio">Sin resultados.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="8" class="td-vacio">{{ vacio('buscar', 'Sin resultados', 'Probá con otra búsqueda o quitá los filtros.') }}</td></tr>{% endfor %}
   </table>
   </div>
-  {% if movs %}<button class="btn chico sec" type="submit" style="margin-top:12px">Eliminar seleccionados</button>{% endif %}
+  {% if movs %}<button class="btn chico gh" type="submit" style="margin-top:16px"><svg class="i"><use href="#i-papelera"/></svg>Eliminar seleccionados</button>{% endif %}
   </form>
-  <p class="mini" style="margin-top:10px">Se muestran hasta 500 registros. Usá el buscador o exportá a Excel para el total.</p>
+  <p class="mini" style="margin-top:12px;margin-bottom:0">Se muestran hasta 500 registros. Usá el buscador o exportá a Excel para el total.</p>
 </div>
 {% endif %}
 {% endblock %}

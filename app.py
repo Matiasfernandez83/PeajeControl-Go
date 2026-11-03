@@ -27,7 +27,8 @@ def headers_seguridad(resp):
     resp.headers["Referrer-Policy"] = "no-referrer"
     # La app usa estilos y scripts inline, por eso 'unsafe-inline'.
     resp.headers["Content-Security-Policy"] = (
-        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src https://fonts.gstatic.com; "
         "script-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
     if IN_PROD:
         resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
