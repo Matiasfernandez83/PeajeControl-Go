@@ -283,9 +283,13 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
   .kpi .l{font-size:10.5px}
   .stat-oscuro{min-width:0;width:100%}
 }
+/* Fondo sutil de particulas (decorativo, detras del contenido) */
+#fondo-red{position:fixed;inset:0;z-index:-1;width:100%;height:100%;pointer-events:none;opacity:.3;display:block}
+@media print{ #fondo-red{display:none} }
 </style>
 </head>
 <body>
+<canvas id="fondo-red" aria-hidden="true"></canvas>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
   <symbol id="i-tablero" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></symbol>
   <symbol id="i-subir" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></symbol>
@@ -419,6 +423,39 @@ async function abrirDetalle(tipo,val){
     document.getElementById('modal-cuerpo').innerHTML=h;
   }catch(e){document.getElementById('modal-cuerpo').innerHTML=vacioHtml('alerta','No se pudo cargar','Probá de nuevo en unos segundos.');}
 }
+</script>
+<script>
+(function(){
+  var cv=document.getElementById('fondo-red'); if(!cv||!cv.getContext) return;
+  var ctx=cv.getContext('2d'), W=0,H=0,DPR=1,nodes=[],raf=0,last=0;
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var BASE='148,163,184', ROJO='227,6,19', AZUL='59,130,246';
+  function resize(){
+    DPR=Math.min(1.5,window.devicePixelRatio||1);
+    W=cv.width=Math.floor(innerWidth*DPR); H=cv.height=Math.floor(innerHeight*DPR);
+    var n=Math.min(40,Math.max(14,Math.round(innerWidth*innerHeight/32000))); nodes=[];
+    for(var i=0;i<n;i++) nodes.push({x:Math.random()*W,y:Math.random()*H,
+      vx:(Math.random()-.5)*.12*DPR,vy:(Math.random()-.5)*.12*DPR,c:Math.random()<.12?ROJO:(Math.random()<.12?AZUL:BASE)});
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H); var L=170*DPR, i, j, a, b, d;
+    for(i=0;i<nodes.length;i++){ a=nodes[i];
+      if(!reduce){ a.x+=a.vx; a.y+=a.vy; if(a.x<0||a.x>W)a.vx*=-1; if(a.y<0||a.y>H)a.vy*=-1; }
+      for(j=i+1;j<nodes.length;j++){ b=nodes[j]; d=Math.hypot(a.x-b.x,a.y-b.y);
+        if(d<L){ ctx.strokeStyle='rgba('+BASE+','+((1-d/L)*.5).toFixed(3)+')'; ctx.lineWidth=DPR;
+          ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); } } }
+    for(i=0;i<nodes.length;i++){ a=nodes[i]; ctx.fillStyle='rgba('+a.c+',.8)';
+      ctx.beginPath(); ctx.arc(a.x,a.y,1.8*DPR,0,7); ctx.fill(); }
+  }
+  function loop(t){ raf=requestAnimationFrame(loop);
+    if(t-last<33) return; last=t; draw(); }   /* tope ~30 fps */
+  function start(){ if(reduce||raf) return; raf=requestAnimationFrame(loop); }
+  function stop(){ if(raf){ cancelAnimationFrame(raf); raf=0; } }
+  resize(); draw();                            /* con movimiento reducido queda un cuadro estatico */
+  start();
+  document.addEventListener('visibilitychange',function(){ document.hidden?stop():start(); });
+  var rt; addEventListener('resize',function(){ clearTimeout(rt); rt=setTimeout(function(){ resize(); draw(); },200); });
+})();
 </script>
 {% block script %}{% endblock %}
 </body>
