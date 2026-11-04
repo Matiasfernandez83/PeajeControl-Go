@@ -28,16 +28,20 @@ Required"). Para mantenerlo **gratis y con datos persistentes** se migró la bas
 2. Anotar la contraseña de la base que definís al crear el proyecto.
 3. Cuando termine de aprovisionar: **Project Settings → Database → Connection string →
    "Session pooler"** (formato URI). Copiar esa URL. Se ve así:
-   `postgresql://postgres.[ref]:[PASSWORD]@aws-0-...pooler.supabase.com:5432/postgres`
-   - Reemplazar `[PASSWORD]` por la contraseña del paso 2.
+   `postgresql://<rol>.<ref-del-proyecto>@<host-del-pooler>:5432/postgres`
+   (con la contraseña incluida: `postgresql://<rol>.<ref-del-proyecto>:<contraseña>@<host-del-pooler>:5432/postgres`).
+   - Si la contraseña tiene caracteres especiales (`@`, `%`, `/`, `:`), codificarlos en la URL.
 
 ### 2) Crear el Web Service en Render
 1. https://dashboard.render.com → **New +** → **Blueprint**.
-2. Conectar GitHub y elegir el repo `Matiasfernandez83/tags-furlong` (rama `main`).
+2. Conectar GitHub y elegir el repo `Matiasfernandez83/PeajeControl-Go` (rama `main`).
 3. Render lee `render.yaml` y propone el service `tags-furlong` (plan **free**).
 4. En las variables de entorno, cargar **`DATABASE_URL`** con la URL de Supabase del paso 1.
+   Es una **variable secreta**: el valor se carga a mano en el panel de Render
+   (Environment) y **nunca** se escribe en `render.yaml` ni en el repo.
    (`SECRET_KEY` se genera sola. `RENDER=true` lo setea Render solo → activa cookies Secure.)
-5. **Apply** y esperar el build (2–4 min).
+5. Opcional: cargar `CONTACTO_EMAIL` y `CONTACTO_WHATSAPP` (datos que muestra la landing; ver abajo).
+6. **Apply** y esperar el build (2–4 min).
 
 ### 3) Primer ingreso
 - Usuario inicial: `admin@peajecontrol.com` / clave `admin`.
@@ -55,15 +59,29 @@ Para probar contra Postgres localmente:
 
     DATABASE_URL='postgresql://usuario@host:puerto/base' python app.py
 
+## Datos de contacto de la landing
+
+La landing (`/landing`) muestra un mail y un WhatsApp. Se cambian **solo** con variables de entorno
+(en Render: Environment), sin tocar código:
+
+| Variable | Ejemplo | Qué hace |
+|---|---|---|
+| `CONTACTO_EMAIL` | `ventas@midominio.com` | Mail visible y link `mailto:` |
+| `CONTACTO_WHATSAPP` | `+54 9 11 1234-5678` | Número visible y link `https://wa.me/<numero>` |
+
+Si no se cargan, la landing muestra datos de ejemplo (`tuemail@peajecontrol.com` / `+54 9 11 0000-0000`).
+
 ## Estado actual del despliegue
 
-- **Supabase**: proyecto `tags-furlong` creado (ref `mssmzevutlgfqfwuntkp`, región `sa-east-1`).
-  - Rol de aplicación dedicado: `furlong_app` (LOGIN, con CREATE/USAGE en schema public).
-    La contraseña NO se versiona; está en la variable `DATABASE_URL` cargada en Render.
+- **Supabase**: proyecto creado (región `sa-east-1`, ref `<ref-del-proyecto>`).
+  - Conviene usar un rol de aplicación dedicado (`<rol>`, con LOGIN y CREATE/USAGE en el schema `public`).
+    La contraseña NO se versiona; está solo en la variable secreta `DATABASE_URL` de Render.
   - La app crea su esquema y el usuario admin sola en el primer arranque.
-  - Conexión usada: **Session pooler** (IPv4), host `aws-0-sa-east-1.pooler.supabase.com:5432`,
-    usuario `furlong_app.mssmzevutlgfqfwuntkp`. (Si Render no conecta, probar `aws-1-...`.)
-- **Render**: falta crear el Web Service (Blueprint desde `main`) y pegar `DATABASE_URL`.
+  - Conexión usada: **Session pooler** (IPv4), host `<host-del-pooler>:5432`,
+    usuario `<rol>.<ref-del-proyecto>`. (Si Render no conecta, probar con el otro host del pooler,
+    por ejemplo `aws-1-...` en vez de `aws-0-...`.)
+- **Render**: Web Service `tags-furlong` ya creado (Blueprint desde `main`, plan free).
+  `DATABASE_URL` está cargada como variable secreta en el panel de Render.
 
 ## Bitácora de cambios
 
@@ -75,7 +93,10 @@ Para probar contra Postgres localmente:
   resumen en Movimientos.
 - **Iteración 3 (producción)**: gunicorn `--timeout 120 --workers 1`, requirements
   pineados, `MAX_CONTENT_LENGTH` 25 MB, cookies HttpOnly/SameSite/Secure, escape XSS
-  en el modal de detalle.
+  en el detalle.
 - **Iteración 4 (esta)**: migración a **PostgreSQL/Supabase** manteniendo compatibilidad
   con SQLite en dev. `render.yaml` pasó a plan free sin disco, con `DATABASE_URL`.
   Probado end-to-end en ambos motores (SQLite y PostgreSQL) y bajo gunicorn.
+- **Mejoras menores**: se borró el modal/endpoint de detalle que ya no se usaba (el tablero abre
+  `/ver/...`), tipografía Inter propia en `static/fonts/` (sin Google Fonts), caché de estáticos de
+  1 año con URLs versionadas (`?v=<huella>`), y contacto de la landing configurable por variables de entorno.
