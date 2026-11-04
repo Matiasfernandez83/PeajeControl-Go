@@ -125,6 +125,35 @@ def test_detalle_json_eliminado():
     for tipo in ("monto", "dueno", "duenos", "camiones", "factura"):
         assert c.get(f"/detalle/{tipo}").status_code == 404, tipo
 
+def test_estaticos_versionados_y_cache():
+    c = cliente()
+    h = c.get("/login").get_data(as_text=True)
+    urls = re.findall(r'(?:href|src)="(/static/[^"]+)"', h)
+    assert urls and all(re.search(r"\?v=[0-9a-f]{10}$", u) for u in urls), urls
+    assert "fonts.googleapis.com" not in h and "fonts.gstatic.com" not in h
+    css = [u for u in urls if "css/fuentes.css" in u][0]
+    r = c.get(css)
+    assert r.status_code == 200
+    cc = r.headers["Cache-Control"]
+    assert "max-age=31536000" in cc and "immutable" in cc, cc
+    assert "font-display:swap" in r.get_data(as_text=True)
+    assert c.get("/static/fonts/inter-400.woff2").status_code == 200
+    csp = c.get("/login").headers["Content-Security-Policy"]
+    assert "googleapis" not in csp and "gstatic" not in csp and "font-src 'self'" in csp
+
+def test_contacto_landing_desde_config():
+    c = cliente()
+    h = c.get("/landing").get_data(as_text=True)
+    assert "mailto:tuemail@peajecontrol.com" in h and "https://wa.me/5491100000000" in h
+    os.environ["CONTACTO_EMAIL"] = "ventas@ejemplo.com"; os.environ["CONTACTO_WHATSAPP"] = "+54 9 11 5555-1234"
+    try:
+        h = c.get("/landing").get_data(as_text=True)
+        assert "mailto:ventas@ejemplo.com" in h and "ventas@ejemplo.com</a>" in h
+        assert "https://wa.me/5491155551234" in h and "+54 9 11 5555-1234" in h
+        assert "tuemail@peajecontrol.com" not in h
+    finally:
+        del os.environ["CONTACTO_EMAIL"]; del os.environ["CONTACTO_WHATSAPP"]
+
 def test_no_sqli():
     c = logueado()
     for q in ["'", "' OR 1=1 --", "\"; DROP TABLE movimientos; --"]:

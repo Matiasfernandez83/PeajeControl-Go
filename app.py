@@ -1,9 +1,9 @@
 # PeajeControl Go - Flask + pdfplumber. BD: SQLite (dev) o PostgreSQL (prod, via DATABASE_URL). Sin IA, sin API keys.
-import csv, io, os, re, sqlite3, base64, secrets, hmac, time, unicodedata
+import csv, hashlib, io, os, re, sqlite3, base64, secrets, hmac, time, unicodedata
 from collections import defaultdict
 from datetime import datetime, timedelta
 from urllib.parse import quote
-from flask import Flask, g, request, redirect, session, render_template, send_file, flash, jsonify, abort
+from flask import Flask, g, request, redirect, session, render_template, send_file, url_for, flash, jsonify, abort
 from werkzeug.security import generate_password_hash, check_password_hash
 from openpyxl import load_workbook, Workbook
 
@@ -15,6 +15,9 @@ if not app.secret_key:
     app.secret_key = secrets.token_hex(32)
     print("ADVERTENCIA: falta la variable SECRET_KEY; se usa una clave aleatoria "
           "(las sesiones se pierden al reiniciar). Definila en el entorno.")
+# Estaticos (CSS/JS/fuentes): el navegador los guarda 1 año. Para que un cambio llegue igual,
+# las URLs de templates llevan ?v=<huella del contenido> (ver url_for mas abajo).
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = timedelta(days=365)
 app.config["MAX_CONTENT_LENGTH"] = 60 * 1024 * 1024  # tope de subida por request (varios archivos): 60 MB
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                   SESSION_COOKIE_SECURE=IN_PROD,
@@ -28,12 +31,63 @@ def headers_seguridad(resp):
     resp.headers["Referrer-Policy"] = "no-referrer"
     # La app usa estilos y scripts inline, por eso 'unsafe-inline'.
     resp.headers.setdefault("Content-Security-Policy", (
-        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src https://fonts.gstatic.com; "
+        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; "
         "script-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"))
     if IN_PROD:
         resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return resp
+
+# ================= ESTATICOS VERSIONADOS Y DATOS DE CONTACTO =================
+def _huellas_estaticos():
+    """Huella corta (md5, 10 caracteres) del contenido de cada archivo de static/. Se calcula una sola vez al arrancar."""
+    base = app.static_folder
+    huellas = {}
+    for raiz, _, archivos in os.walk(base):
+        for nombre in archivos:
+            ruta = os.path.join(raiz, nombre)
+            with open(ruta, "rb") as f:
+                huellas[os.path.relpath(ruta, base).replace(os.sep, "/")] = hashlib.md5(f.read()).hexdigest()[:10]
+    return huellas
+
+HUELLAS_ESTATICOS = _huellas_estaticos()
+
+@app.context_processor
+def inyectar_url_for_versionado():
+    """url_for('static', filename=...) en las plantillas agrega ?v=<huella>: si el archivo cambia, cambia la URL y se invalida la cache."""
+    def url_for_v(endpoint, **valores):
+        if endpoint == "static" and "v" not in valores:
+            v = HUELLAS_ESTATICOS.get(valores.get("filename", ""))
+            if v: valores["v"] = v
+        return url_for(endpoint, **valores)
+    return {"url_for": url_for_v}
+
+@app.after_request
+def cache_estaticos(resp):
+    # Con ?v= la URL cambia cuando cambia el archivo, asi que se puede guardar sin revalidar.
+    if request.endpoint == "static" and "v" in request.args and resp.status_code == 200:
+        resp.cache_control.immutable = True
+    return resp
+
+# Contacto de la landing: UN solo lugar. Se cambia con las variables CONTACTO_EMAIL y CONTACTO_WHATSAPP
+# (en Render: Environment). Si faltan o estan vacias, se usan estos datos de ejemplo.
+CONTACTO_EMAIL_DEFAULT = "tuemail@peajecontrol.com"
+CONTACTO_WHATSAPP_DEFAULT = "+54 9 11 0000-0000"
+
+def datos_contacto():
+    email = (os.environ.get("CONTACTO_EMAIL") or "").strip() or CONTACTO_EMAIL_DEFAULT
+    whatsapp = (os.environ.get("CONTACTO_WHATSAPP") or "").strip() or CONTACTO_WHATSAPP_DEFAULT
+    asunto = "Quiero una demo de PeajeControl Go"
+    return {
+        "email": email,
+        "whatsapp": whatsapp,
+        "mailto": f"mailto:{email}?subject={quote(asunto)}",
+        # wa.me pide solo digitos, con codigo de pais y sin +
+        "whatsapp_url": f"https://wa.me/{re.sub(r'[^0-9]', '', whatsapp)}?text={quote(asunto)}",
+    }
+
+@app.context_processor
+def inyectar_contacto():
+    return {"contacto": datos_contacto()}
 
 def csrf_token():
     if "_csrf" not in session:
