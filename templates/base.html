@@ -138,6 +138,21 @@ h3{font-size:15px;font-weight:600}
 .pagina-cab h1{margin-bottom:2px}
 .pagina-cab .sub{margin:0}
 
+/* Trazabilidad: volver, paginador, origen, abrir en pestaña */
+.volver-barra{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:-6px 0 18px}
+.volver-barra .btn{height:38px;font-weight:600}
+.paginador{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:18px;padding-top:14px;border-top:1px solid var(--borde)}
+.paginador .pos{font-size:13.5px;font-weight:600;color:var(--txt);padding:0 8px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.paginador .btn.off{opacity:.38;pointer-events:none}
+a.origen{display:inline-flex;align-items:center;gap:6px;max-width:220px;font-size:12.5px;font-weight:600;color:var(--azul);text-decoration:none;
+  padding:3px 8px;border-radius:var(--radio-ch);background:var(--soft-bg);border:1px solid var(--borde)}
+a.origen span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+a.origen .i{width:14px;height:14px;flex-shrink:0}
+a.origen:hover{border-color:var(--azul)}
+span.origen{color:var(--tenue);font-size:12px}
+tr[data-abrir]{cursor:pointer}
+.sd-nota{font-size:11px;color:var(--tenue);margin-left:6px;font-weight:400}
+
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;margin-bottom:24px}
 /* Paneles: unicos elementos con vidrio (oscuro) / tarjeta blanca con sombra (luz) */
 .tarjeta,.kpi,.modal .caja{background:var(--panel-bg);-webkit-backdrop-filter:var(--panel-blur);backdrop-filter:var(--panel-blur);
@@ -486,6 +501,13 @@ function verClave(btn){var i=btn.parentNode.querySelector('input'),m=i.type==='p
 function pesos(n){return '$'+Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function vacioHtml(ic,titulo,ayuda){return '<div class="vacio"><svg class="i"><use href="#i-'+ic+'"/></svg><b>'+esc(titulo)+'</b>'+(ayuda?'<span>'+esc(ayuda)+'</span>':'')+'</div>';}
+
+function abrirPestana(tipo,val){window.open('/ver/'+tipo+(val?('?v='+encodeURIComponent(val)):''),'_blank','noopener');}
+document.addEventListener('dblclick',function(e){
+  if(e.target.closest('a,button,input,select,textarea,label'))return;
+  var tr=e.target.closest('tr[data-abrir]');
+  if(tr){window.open(tr.getAttribute('data-abrir'),'_blank','noopener');}
+});
 function cerrarModal(){document.getElementById('modal').classList.remove('abierto');}
 document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')cerrarModal();});
 async function abrirDetalle(tipo,val){
@@ -497,17 +519,18 @@ async function abrirDetalle(tipo,val){
     const r=await fetch('/detalle/'+tipo+(val?('?v='+encodeURIComponent(val)):''));
     const d=await r.json();
     document.getElementById('modal-titulo').textContent=d.titulo+' ('+d.filas.length+')';
+    const abrir=d.pagina?'<p class="mini" style="margin:12px 0"><a class="btn chico sec" href="'+esc(d.pagina)+'" target="_blank" rel="noopener">Abrir en pestaña nueva</a></p>':'';
     if(!d.filas.length){document.getElementById('modal-cuerpo').innerHTML=vacioHtml('bandeja','Sin registros','No hay datos para mostrar en esta tarjeta.');return;}
     let h='<div class="tabla-wrap"><table><thead><tr>';
     if(d.modo==='grupo'){
       h+='<th>Responsable</th><th class=num>Operaciones</th><th class=num>Patentes</th><th class=num>Monto</th></tr></thead><tbody>';
       d.filas.forEach(f=>{h+=`<tr><td><b>${esc(f.dueno)}</b></td><td class=num>${esc(f.n)}</td><td class=num>${esc(f.patentes)}</td><td class=num>${pesos(f.monto)}</td></tr>`;});
     }else{
-      h+='<th>Fecha</th><th>TAG</th><th>Patente</th><th>Concepto</th><th>Responsable</th><th class=num>Monto</th></tr></thead><tbody>';
-      d.filas.forEach(f=>{h+=`<tr><td>${esc(f.fecha)}</td><td class=mono>${esc(f.tag)}</td><td class=mono>${esc(f.patente)}</td><td>${esc(f.concepto)}</td><td>${esc(f.dueno)}</td><td class=num>${pesos(f.monto)}</td></tr>`;});
+      h+='<th>Fecha</th><th>TAG</th><th>Patente</th><th>Concepto</th><th>Responsable</th><th>Factura/Origen</th><th class=num>Monto</th></tr></thead><tbody>';
+      d.filas.forEach(f=>{h+=`<tr><td>${esc(f.fecha)}</td><td class=mono>${esc(f.tag)}</td><td class=mono>${esc(f.patente)}</td><td>${esc(f.concepto)}</td><td>${esc(f.dueno)}</td><td>${f.archivo_id?`<a class=origen href="/${"archivo"}/${f.archivo_id}" target=_blank rel=noopener title="Ver la factura"><svg class=i><use href="#i-archivo"/></svg><span>${esc(f.archivo)}</span></a>`:`<span class=origen>${esc(f.archivo||'—')}</span>`}</td><td class=num>${pesos(f.monto)}</td></tr>`;});
     }
     h+='</tbody></table></div>';
-    document.getElementById('modal-cuerpo').innerHTML=h;
+    document.getElementById('modal-cuerpo').innerHTML=abrir+h;
   }catch(e){document.getElementById('modal-cuerpo').innerHTML=vacioHtml('alerta','No se pudo cargar','Probá de nuevo en unos segundos.');}
 }
 </script>

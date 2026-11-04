@@ -44,7 +44,7 @@ def xlsx(filas):
 def test_rutas_exigen_login():
     c = cliente()
     for ruta in ["/", "/movimientos", "/importar", "/flota", "/gastos", "/reportes", "/config",
-                 "/empresas", "/exportar", "/gastos/exportar", "/detalle/monto"]:
+                 "/empresas", "/exportar", "/gastos/exportar", "/detalle/monto", "/ver/monto", "/archivo/1", "/factura/x.pdf"]:
         r = c.get(ruta)
         assert r.status_code == 302 and "/login" in r.headers["Location"], f"{ruta} sin login: {r.status_code}"
 
@@ -334,6 +334,65 @@ def test_flota_importar_base_post():
     d = A._conectar()
     try: assert d.execute("SELECT COUNT(*) n FROM flota").fetchone()["n"] == 10
     finally: d.close()
+
+def test_trazabilidad_factura_pdf_y_detalle_paginado():
+    import base64
+    c = logueado()
+    d = A._conectar()
+    try:
+        E = d.execute("SELECT empresa_id FROM usuarios WHERE email=?", (EMAIL,)).fetchone()["empresa_id"]
+        pdf = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"
+        d.execute("INSERT INTO archivos(empresa_id,nombre,tipo,total_doc,contenido,mime,creado) VALUES(?,?,?,?,?,?,?)",
+                  (E, "FC-TRAZA.pdf", "Peajes", 0, base64.b64encode(pdf).decode(), "application/pdf", "01/01/2026"))
+        aid = d.execute("SELECT id FROM archivos WHERE empresa_id=? AND nombre='FC-TRAZA.pdf'", (E,)).fetchone()["id"]
+        filas = [(E, "01/10/2026", "11111111", "" if i % 2 else "TR123AA", "Peaje", 10.0, "", "", 0, "FC-TRAZA.pdf", "x")
+                 for i in range(120)]
+        d.executemany("""INSERT INTO movimientos(empresa_id,fecha,tag,patente,concepto,monto,dueno,equipo,verificado,archivo,creado)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?)""", filas)
+        d.commit()
+    finally:
+        d.close()
+    # PDF inline, scopeado por empresa
+    for ruta in (f"/archivo/{aid}", "/factura/FC-TRAZA.pdf"):
+        r = c.get(ruta)
+        assert r.status_code == 200 and r.mimetype == "application/pdf", ruta
+        assert r.headers["Content-Disposition"].startswith("inline"), r.headers["Content-Disposition"]
+        assert r.data == pdf
+    assert c.get("/archivo/999999").status_code == 404
+    assert cliente().get(f"/archivo/{aid}").status_code == 302   # sin login
+    post(c, "/empresas/crear", {"empresa": "Ajena SA", "email": "ajena@test.com", "clave": "ajenaajena", "nombre": "A"}, "/empresas")
+    c2 = cliente(); assert login(c2, "ajena@test.com", "ajenaajena").status_code == 302
+    assert c2.get(f"/archivo/{aid}").status_code == 404
+    assert c2.get("/factura/FC-TRAZA.pdf").status_code == 404
+    h2 = c2.get("/ver/factura?v=FC-TRAZA.pdf").get_data(as_text=True)
+    assert "Sin resultados" in h2 and "/archivo/" not in h2
+    # cada movimiento expone su factura de origen (id del archivo)
+    j = c.get("/detalle/factura?v=FC-TRAZA.pdf").get_json()
+    assert len(j["filas"]) == 120 and all(f["archivo"] == "FC-TRAZA.pdf" and f["archivo_id"] == aid for f in j["filas"])
+    assert j["pagina"].startswith("/ver/factura")
+    # pagina standalone paginada, con link a la factura y filtros conservados
+    h1 = c.get("/ver/factura?v=FC-TRAZA.pdf").get_data(as_text=True)
+    assert f"/archivo/{aid}" in h1 and "Página 1 de 3" in h1 and "p=2" in h1
+    h3 = c.get("/ver/factura?v=FC-TRAZA.pdf&p=3").get_data(as_text=True)
+    assert "Página 3 de 3" in h3
+    assert "Página 3 de 3" in c.get("/ver/factura?v=FC-TRAZA.pdf&p=999").get_data(as_text=True)
+    assert c.get("/ver/factura?v=FC-TRAZA.pdf&p=abc").status_code == 200
+    hq = c.get("/ver/factura?v=FC-TRAZA.pdf&q=TR123AA").get_data(as_text=True)
+    assert "Página 1 de 2" in hq and "q=TR123AA" in hq
+    # S/D: movimientos sin patente, con su factura
+    hsd = c.get("/ver/vehiculo?v=S/D").get_data(as_text=True)
+    assert "S/D" in hsd and "FC-TRAZA.pdf" in hsd and "Página 1 de 2" in hsd
+    assert "TR123AA" in c.get("/ver/vehiculo?v=TR123AA").get_data(as_text=True)
+    # tarjetas del tablero y agrupados
+    for t in ("monto", "operaciones", "verificados", "sinmatch", "camiones", "duenos"):
+        assert c.get(f"/ver/{t}").status_code == 200, t
+    assert "TR123AA" in c.get("/ver/camiones").get_data(as_text=True)
+    assert c.get("/ver/dueno?v=Sin asignar").status_code == 200
+    assert c.get("/ver/inexistente").status_code == 404
+    # movimientos paginado + columna origen
+    hm = c.get("/movimientos").get_data(as_text=True)
+    assert "Página 1 de" in hm and f"/archivo/{aid}" in hm
+    assert "target=\"_blank\"" in c.get("/movimientos?vista=vehiculo").get_data(as_text=True)
 
 if __name__ == "__main__":
     fallos = 0

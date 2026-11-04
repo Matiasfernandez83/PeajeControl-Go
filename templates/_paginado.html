@@ -1,0 +1,26 @@
+{# Controles de paginado: conserva todos los parametros de la URL (filtros) y cambia solo p. #}
+{% macro paginado(pagina, paginas) %}
+{% if paginas > 1 %}
+{% set a = request.args.to_dict() %}
+<nav class="paginador" aria-label="Paginación">
+  {% if pagina > 1 %}
+  <a class="btn chico gh" href="{{ request.path }}?{{ dict(a, p=1)|urlencode }}" title="Primera página" aria-label="Primera página">&laquo;</a>
+  <a class="btn chico gh" href="{{ request.path }}?{{ dict(a, p=pagina - 1)|urlencode }}">&larr; Anterior</a>
+  {% else %}
+  <span class="btn chico gh off">&laquo;</span><span class="btn chico gh off">&larr; Anterior</span>
+  {% endif %}
+  <span class="pos">Página {{ pagina }} de {{ paginas }}</span>
+  {% if pagina < paginas %}
+  <a class="btn chico gh" href="{{ request.path }}?{{ dict(a, p=pagina + 1)|urlencode }}">Siguiente &rarr;</a>
+  <a class="btn chico gh" href="{{ request.path }}?{{ dict(a, p=paginas)|urlencode }}" title="Última página" aria-label="Última página">&raquo;</a>
+  {% else %}
+  <span class="btn chico gh off">Siguiente &rarr;</span><span class="btn chico gh off">&raquo;</span>
+  {% endif %}
+</nav>
+{% endif %}
+{% endmacro %}
+
+{# Celda "Factura/Origen": link al PDF guardado (si existe) o solo el nombre. #}
+{% macro origen(m) %}
+{% if m.archivo_id %}<a class="origen" href="/archivo/{{ m.archivo_id }}" target="_blank" rel="noopener" title="Ver la factura de donde sale este monto: {{ m.archivo }}"><svg class="i"><use href="#i-archivo"/></svg><span>{{ m.archivo }}</span></a>{% else %}<span class="origen" title="Sin PDF guardado">{{ m.archivo or '—' }}</span>{% endif %}
+{% endmacro %}

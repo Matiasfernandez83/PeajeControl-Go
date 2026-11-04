@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_vacio.html" import vacio %}
+{% from "_paginado.html" import paginado %}
 {% block cuerpo %}
 <h1>Base maestra de flota</h1>
 <div class="tarjeta">
@@ -44,13 +45,7 @@
     {% else %}<tr><td colspan="7" class="td-vacio">{% if q %}{{ vacio('buscar', 'Sin resultados', 'Ningún equipo coincide con la búsqueda.') }}{% else %}{{ vacio('camion', 'La base está vacía', 'Subí el Excel de flota o agregá un equipo.') }}{% endif %}</td></tr>{% endfor %}
   </table>
   </div>
-  {% if paginas > 1 %}
-  <div class="linea" style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:16px">
-    {% if pagina > 1 %}<a class="btn chico gh" href="/flota?p={{ pagina - 1 }}{% if q %}&q={{ q|urlencode }}{% endif %}">&larr; Anterior</a>{% endif %}
-    <span class="mini" style="margin:0">Página {{ pagina }} de {{ paginas }}</span>
-    {% if pagina < paginas %}<a class="btn chico gh" href="/flota?p={{ pagina + 1 }}{% if q %}&q={{ q|urlencode }}{% endif %}">Siguiente &rarr;</a>{% endif %}
-  </div>
-  {% endif %}
+  {{ paginado(pagina, paginas) }}
 </div>
 
 <div class="modal" id="modal-equipo">

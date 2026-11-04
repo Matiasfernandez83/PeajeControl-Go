@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_vacio.html" import vacio %}
+{% from "_paginado.html" import paginado, origen %}
 {% block cuerpo %}
 <div class="pagina-cab">
   <div>
@@ -73,14 +74,15 @@
   <table>
     <tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th class="ocultar-mov">Resumen origen</th><th class="num">Monto</th></tr>
     {% for m in detalle %}
-    <tr>
+    <tr{% if m.archivo_id %} data-abrir="/archivo/{{ m.archivo_id }}" title="Doble click para ver la factura"{% endif %}>
       <td>{{ m.fecha }}</td><td style="font-weight:600">{{ m.concepto }}</td>
       <td><span class="chip {{ m.categoria }}">{{ m.categoria|capitalize }}</span></td>
-      <td class="ocultar-mov tenue">{{ m.archivo }}</td>
+      <td class="ocultar-mov tenue">{{ origen(m) }}</td>
       <td class="num">{{ m.monto|pesos }}</td>
     </tr>
     {% else %}<tr><td colspan="5" class="td-vacio">{{ vacio('tarjeta', 'No se detectaron gastos de peaje', 'Cuando cargues un resumen, los consumos aparecen acá.') }}</td></tr>{% endfor %}
   </table>
   </div>
+  {{ paginado(pagina, paginas) }}
 </div>
 {% endblock %}

@@ -2,7 +2,8 @@
 import csv, io, os, re, sqlite3, base64, json, secrets, hmac, time, unicodedata
 from collections import defaultdict
 from datetime import datetime, timedelta
-from flask import Flask, g, request, redirect, session, render_template, send_file, flash, jsonify
+from urllib.parse import quote
+from flask import Flask, g, request, redirect, session, render_template, send_file, flash, jsonify, abort
 from werkzeug.security import generate_password_hash, check_password_hash
 from openpyxl import load_workbook, Workbook
 
@@ -22,14 +23,14 @@ app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
 # ================= SEGURIDAD: headers, CSRF, rate limit =================
 @app.after_request
 def headers_seguridad(resp):
-    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers.setdefault("X-Frame-Options", "DENY")
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["Referrer-Policy"] = "no-referrer"
     # La app usa estilos y scripts inline, por eso 'unsafe-inline'.
-    resp.headers["Content-Security-Policy"] = (
+    resp.headers.setdefault("Content-Security-Policy", (
         "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src https://fonts.gstatic.com; "
-        "script-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+        "script-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"))
     if IN_PROD:
         resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return resp
@@ -644,36 +645,140 @@ def dashboard():
     dist = d.execute("""SELECT CASE WHEN verificado=1 THEN 'Verificados en flota'
         ELSE 'Sin match de TAG' END k, COUNT(*) n, SUM(monto) t FROM movimientos
         WHERE empresa_id=? GROUP BY 1""", (E,)).fetchall()
-    ult = d.execute("SELECT * FROM movimientos WHERE empresa_id=? ORDER BY id DESC LIMIT 20", (E,)).fetchall()
+    ult = d.execute(SEL_MOV + " WHERE m.empresa_id=? ORDER BY m.id DESC LIMIT 20", (E,)).fetchall()
     maximo = max([r["t"] for r in top], default=1)
     return render_template("dashboard.html", kpi=kpi, top=top, dist=dist, ult=ult, maximo=maximo)
+
+# --- Trazabilidad: cada movimiento sale con el id del archivo (factura) del que viene ---
+SEL_MOV = ("SELECT m.*, a.id archivo_id FROM movimientos m LEFT JOIN archivos a "
+           "ON a.empresa_id=m.empresa_id AND a.nombre=m.archivo")
+MOV_POR_PAGINA = 50
+
+def paginar(total, por=MOV_POR_PAGINA):
+    """(pagina, paginas, offset) a partir de ?p=, igual que /flota."""
+    p = request.args.get("p", "1")
+    pagina = max(int(p), 1) if p.isdigit() else 1
+    paginas = max((total + por - 1) // por, 1)
+    pagina = min(pagina, paginas)
+    return pagina, paginas, (pagina - 1) * por
+
+def cond_busqueda(q):
+    """Condicion de busqueda libre sobre movimientos (alias m)."""
+    if not q: return [], []
+    return ["(m.tag LIKE ? OR m.patente LIKE ? OR m.dueno LIKE ? OR m.concepto LIKE ?)"], [f"%{q}%"] * 4
+
+# Detalle por tipo: (titulo, condicion SQL sobre alias m, args, orden, a donde vuelve)
+def filtro_detalle(tipo, arg):
+    if tipo == "dueno":
+        if arg == "Sin asignar":
+            return "Detalle: Sin asignar", "(m.dueno IS NULL OR m.dueno='')", [], "m.monto DESC, m.id", "/movimientos?vista=responsable"
+        return f"Detalle: {arg}", "m.dueno=?", [arg], "m.monto DESC, m.id", "/movimientos?vista=responsable"
+    if tipo == "vehiculo":
+        if arg == "S/D":
+            return "Vehículo S/D (sin patente)", "(m.patente IS NULL OR m.patente='')", [], "m.id DESC", "/movimientos?vista=vehiculo"
+        return f"Vehículo: {arg}", "m.patente=?", [arg], "m.id DESC", "/movimientos?vista=vehiculo"
+    if tipo == "factura":
+        return f"Factura: {arg}", "m.archivo=?", [arg], "m.id", "/reportes"
+    if tipo == "verificados":
+        return "Verificados en flota", "m.verificado=1", [], "m.id DESC", "/"
+    if tipo == "sinmatch":
+        return "Sin match de TAG", "(m.verificado=0 OR m.verificado IS NULL)", [], "m.id DESC", "/"
+    if tipo == "monto":
+        return "Monto total", "1=1", [], "m.monto DESC, m.id", "/"
+    return "Operaciones", "1=1", [], "m.id DESC", "/"
 
 # --- Endpoint JSON para modales de doble-click (drill-down) ---
 @app.route("/detalle/<tipo>")
 def detalle(tipo):
     d = db(); E = emp()
     arg = request.args.get("v", "")
-    if tipo == "monto" or tipo == "operaciones":
-        rows = d.execute("SELECT * FROM movimientos WHERE empresa_id=? ORDER BY monto DESC LIMIT 1000", (E,)).fetchall()
-        titulo = "Monto total" if tipo == "monto" else "Operaciones"
-    elif tipo == "camiones":
-        rows = d.execute("""SELECT * FROM movimientos WHERE empresa_id=? AND id IN (
+    pagina_url = f"/ver/{tipo}" + (f"?v={quote(arg)}" if arg else "")
+    if tipo == "camiones":
+        rows = d.execute(SEL_MOV + """ WHERE m.empresa_id=? AND m.id IN (
             SELECT MAX(id) FROM movimientos WHERE patente<>'' AND empresa_id=? GROUP BY patente)
-            ORDER BY monto DESC""", (E, E)).fetchall()
+            ORDER BY m.monto DESC""", (E, E)).fetchall()
         titulo = "Camiones activos"
     elif tipo == "duenos":
         rows = d.execute("""SELECT dueno, COUNT(*) n, SUM(monto) monto,
             COUNT(DISTINCT patente) patentes FROM movimientos WHERE dueno!='' AND empresa_id=?
             GROUP BY dueno ORDER BY monto DESC""", (E,)).fetchall()
-        return jsonify(titulo="Responsables", modo="grupo",
+        return jsonify(titulo="Responsables", modo="grupo", pagina=pagina_url,
                        filas=[dict(r) for r in rows])
-    elif tipo == "dueno":
-        rows = d.execute("SELECT * FROM movimientos WHERE dueno=? AND empresa_id=? ORDER BY monto DESC", (arg, E)).fetchall()
-        titulo = f"Detalle: {arg}"
     else:
-        rows = d.execute("SELECT * FROM movimientos WHERE empresa_id=? ORDER BY id DESC LIMIT 500", (E,)).fetchall()
-        titulo = "Movimientos"
-    return jsonify(titulo=titulo, modo="detalle", filas=[dict(r) for r in rows])
+        titulo, cond, args, orden, _ = filtro_detalle(tipo, arg)
+        rows = d.execute(SEL_MOV + f" WHERE m.empresa_id=? AND {cond} ORDER BY {orden} LIMIT 1000", [E] + args).fetchall()
+    return jsonify(titulo=titulo, modo="detalle", pagina=pagina_url, filas=[dict(r) for r in rows])
+
+# --- Paginas de detalle standalone (abribles en otra pestaña, con paginado y filtros por URL) ---
+# /ver/<tipo>?v=<valor>&q=<busqueda>&p=<pagina>
+# tipos: monto, operaciones, verificados, sinmatch (listas) | camiones, duenos (agrupados)
+#        dueno, vehiculo, factura (v=nombre; vehiculo v=S/D son los movimientos sin patente)
+@app.route("/ver/<tipo>")
+def ver(tipo):
+    TIPOS = ("monto", "operaciones", "verificados", "sinmatch", "camiones", "duenos", "dueno", "vehiculo", "factura")
+    if tipo not in TIPOS: abort(404)
+    d = db(); E = emp()
+    arg = request.args.get("v", "").strip()
+    q = request.args.get("q", "").strip()
+    if tipo in ("camiones", "duenos"):
+        if tipo == "camiones":
+            titulo, volver = "Camiones activos", "/"
+            cond, key, sub = "patente IS NOT NULL AND patente<>''", "patente", "MAX(dueno)"
+            enlace = "vehiculo"
+        else:
+            titulo, volver = "Responsables", "/"
+            cond, key, sub = "dueno IS NOT NULL AND dueno<>''", "dueno", "COUNT(DISTINCT patente)"
+            enlace = "dueno"
+        total = d.execute(f"SELECT COUNT(DISTINCT {key}) n FROM movimientos WHERE empresa_id=? AND {cond}", (E,)).fetchone()["n"]
+        pagina, paginas, off = paginar(total)
+        grupos = d.execute(f"""SELECT {key} g, COUNT(*) n, SUM(monto) t, {sub} sub FROM movimientos
+            WHERE empresa_id=? AND {cond} GROUP BY {key} ORDER BY t DESC, {key} LIMIT ? OFFSET ?""",
+            (E, MOV_POR_PAGINA, off)).fetchall()
+        return render_template("detalle.html", modo="grupo", titulo=titulo, volver=volver, tipo=tipo, enlace=enlace,
+                               grupos=grupos, total=total, pagina=pagina, paginas=paginas, por_pagina=MOV_POR_PAGINA,
+                               arg=arg, q=q, archivo=None, resumen=None, movs=[])
+    titulo, cond, args, orden, volver = filtro_detalle(tipo, arg)
+    cq, aq = cond_busqueda(q)
+    where = " WHERE m.empresa_id=? AND " + " AND ".join([cond] + cq)
+    args = [E] + args + aq
+    resumen = d.execute("SELECT COUNT(*) n, COALESCE(SUM(m.monto),0) t FROM movimientos m" + where, args).fetchone()
+    pagina, paginas, off = paginar(resumen["n"])
+    movs = d.execute(SEL_MOV + where + f" ORDER BY {orden} LIMIT ? OFFSET ?", args + [MOV_POR_PAGINA, off]).fetchall()
+    archivo = None
+    if tipo == "factura":
+        archivo = d.execute("SELECT id,nombre,tipo,total_doc,mime,creado FROM archivos WHERE empresa_id=? AND nombre=?",
+                            (E, arg)).fetchone()
+    return render_template("detalle.html", modo="detalle", titulo=titulo, volver=volver, tipo=tipo, enlace="",
+                           movs=movs, grupos=[], total=resumen["n"], resumen=resumen, pagina=pagina, paginas=paginas,
+                           por_pagina=MOV_POR_PAGINA, arg=arg, q=q, archivo=archivo)
+
+# --- Ver la factura (PDF) guardada, inline en el navegador ---
+def _servir_archivo(fila):
+    if not fila or not fila["contenido"]:
+        return None
+    try:
+        data = base64.b64decode(fila["contenido"])
+    except Exception:
+        return None
+    mime = fila["mime"] or "application/octet-stream"
+    es_pdf = mime == "application/pdf"
+    resp = send_file(io.BytesIO(data), mimetype=mime, as_attachment=not es_pdf, download_name=fila["nombre"])
+    if es_pdf:
+        # Se puede mostrar embebido (iframe/embed) solo desde la propia app.
+        resp.headers["X-Frame-Options"] = "SAMEORIGIN"
+        resp.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self'"
+    resp.headers["Cache-Control"] = "private, no-store"
+    return resp
+
+@app.route("/archivo/<int:aid>")
+def ver_archivo(aid):
+    r = db().execute("SELECT nombre,mime,contenido FROM archivos WHERE id=? AND empresa_id=?", (aid, emp())).fetchone()
+    return _servir_archivo(r) or ("Archivo no disponible.", 404)
+
+@app.route("/factura/<path:nombre>")
+def ver_factura(nombre):
+    r = db().execute("SELECT nombre,mime,contenido FROM archivos WHERE nombre=? AND empresa_id=?", (nombre, emp())).fetchone()
+    return _servir_archivo(r) or ("Archivo no disponible.", 404)
 
 @app.route("/movimientos")
 def movimientos():
@@ -690,21 +795,22 @@ def movimientos():
             SUM(monto) t, COUNT(DISTINCT patente) sub FROM movimientos WHERE empresa_id=? GROUP BY 1 ORDER BY t DESC""", (E,)).fetchall()
         return render_template("movimientos.html", vista=vista, grupos=grupos, q=q, movs=[], etiqueta="Responsable")
     filtro = request.args.get("filtro", "")
-    args, conds = [E], ["empresa_id=?"]
-    if q:
-        conds.append("(tag LIKE ? OR patente LIKE ? OR dueno LIKE ? OR concepto LIKE ?)")
-        args += [f"%{q}%"] * 4
+    args, conds = [E], ["m.empresa_id=?"]
+    cq, aq = cond_busqueda(q)
+    conds += cq; args += aq
     if dueno:
-        conds.append("COALESCE(NULLIF(dueno,''),'Sin asignar')=?"); args.append(dueno)
+        conds.append("COALESCE(NULLIF(m.dueno,''),'Sin asignar')=?"); args.append(dueno)
     if filtro == "verificado":
-        conds.append("verificado=1")
+        conds.append("m.verificado=1")
     elif filtro == "sinmatch":
-        conds.append("verificado=0")
-    where = (" WHERE " + " AND ".join(conds)) if conds else ""
-    movs = d.execute("SELECT * FROM movimientos" + where + " ORDER BY id DESC LIMIT 500", args).fetchall()
-    resumen = d.execute("SELECT COUNT(*) n, COALESCE(SUM(monto),0) t FROM movimientos" + where, args).fetchone()
+        conds.append("m.verificado=0")
+    where = " WHERE " + " AND ".join(conds)
+    resumen = d.execute("SELECT COUNT(*) n, COALESCE(SUM(m.monto),0) t FROM movimientos m" + where, args).fetchone()
+    pagina, paginas, off = paginar(resumen["n"])
+    movs = d.execute(SEL_MOV + where + " ORDER BY m.id DESC LIMIT ? OFFSET ?", args + [MOV_POR_PAGINA, off]).fetchall()
     return render_template("movimientos.html", vista="detalle", movs=movs, q=q or dueno,
-                           qtext=q, dueno=dueno, filtro=filtro, resumen=resumen, grupos=[])
+                           qtext=q, dueno=dueno, filtro=filtro, resumen=resumen, grupos=[],
+                           pagina=pagina, paginas=paginas, total=resumen["n"], por_pagina=MOV_POR_PAGINA)
 
 @app.route("/movimientos/borrar", methods=["POST"])
 def borrar_movimientos():
@@ -959,13 +1065,18 @@ def gastos():
         FROM resumenes r LEFT JOIN gastos g ON g.resumen_id=r.id
         WHERE r.empresa_id=? GROUP BY r.id ORDER BY r.id DESC""", (E,)).fetchall()
     cat = request.args.get("cat", "")
-    sql = "SELECT g.*, r.banco, r.archivo FROM gastos g JOIN resumenes r ON r.id=g.resumen_id WHERE g.empresa_id=?"
+    base = (" FROM gastos g JOIN resumenes r ON r.id=g.resumen_id LEFT JOIN archivos a "
+            "ON a.empresa_id=g.empresa_id AND a.nombre=r.archivo WHERE g.empresa_id=?")
     args = [E]
-    if cat: sql += " AND g.categoria=?"; args.append(cat)
-    detalle = d.execute(sql + " ORDER BY g.id DESC LIMIT 500", args).fetchall()
+    if cat: base += " AND g.categoria=?"; args.append(cat)
+    total = d.execute("SELECT COUNT(*) n" + base, args).fetchone()["n"]
+    pagina, paginas, off = paginar(total)
+    detalle = d.execute("SELECT g.*, r.banco, r.archivo, a.id archivo_id" + base + " ORDER BY g.id DESC LIMIT ? OFFSET ?",
+                        args + [MOV_POR_PAGINA, off]).fetchall()
     deuda = d.execute("SELECT COALESCE(SUM(total_resumen),0) t, COUNT(*) n FROM resumenes WHERE empresa_id=?", (E,)).fetchone()
     cats = d.execute("SELECT categoria, COUNT(*) n, SUM(monto) t FROM gastos WHERE empresa_id=? GROUP BY categoria ORDER BY t DESC", (E,)).fetchall()
-    return render_template("gastos.html", resumenes=resumenes, detalle=detalle, deuda=deuda, cat=cat, cats=cats)
+    return render_template("gastos.html", resumenes=resumenes, detalle=detalle, deuda=deuda, cat=cat, cats=cats,
+                           pagina=pagina, paginas=paginas, total=total, por_pagina=MOV_POR_PAGINA)
 
 @app.route("/gastos/borrar/<int:rid>", methods=["POST"])
 def borrar_resumen(rid):
@@ -991,7 +1102,7 @@ def reportes():
     d = db(); E = emp()
     n = d.execute("SELECT COUNT(*) n FROM movimientos WHERE empresa_id=?", (E,)).fetchone()["n"]
     ng = d.execute("SELECT COUNT(*) n FROM gastos WHERE empresa_id=?", (E,)).fetchone()["n"]
-    historial = d.execute("SELECT nombre,tipo,total_doc,creado FROM archivos WHERE empresa_id=? ORDER BY id DESC", (E,)).fetchall()
+    historial = d.execute("SELECT id,nombre,tipo,total_doc,creado FROM archivos WHERE empresa_id=? ORDER BY id DESC", (E,)).fetchall()
     return render_template("reportes.html", n=n, ng=ng, historial=historial)
 
 @app.route("/reportes/descargar/<path:nombre>")
