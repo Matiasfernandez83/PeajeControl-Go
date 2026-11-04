@@ -311,6 +311,30 @@ def test_migracion_agrega_columnas_faltantes():
     A.migrar(cx)  # idempotente
     cx.close()
 
+def test_flota_importar_base_post():
+    # Caso produccion: POST /flota (Actualizar base) debe responder bien y cargar responsable/equipo/estado/marca.
+    c = logueado()
+    filas = [["NUMERO DE TAG", "PATENTE", "RESPONSABLE", "EQUIPO", "ESTADO", "MARCA"]]
+    for i in range(300):
+        filas.append([f"9000{i:04d}", f"AB{i:03d}CD", "REQUIERE APROB GP", f"EQUIPO {i}", "ACTIVO", "IVECO"])
+    filas.append(["90000000", "DUP", "OTRO", "X", "X", "X"])   # TAG repetido: se descarta
+    r = post(c, "/flota", {"archivo": (xlsx(filas), "BASE.xlsx")}, "/flota")
+    assert r.status_code == 302, r.status_code
+    d = A._conectar()
+    try:
+        n = d.execute("SELECT COUNT(*) n FROM flota WHERE dueno='REQUIERE APROB GP' AND estado='ACTIVO' "
+                      "AND marca='IVECO' AND equipo LIKE 'EQUIPO %'").fetchone()["n"]
+        total = d.execute("SELECT COUNT(*) n FROM flota").fetchone()["n"]
+    finally:
+        d.close()
+    assert n == total == 300, (n, total)
+    assert c.get("/flota").status_code == 200
+    # una segunda carga reemplaza la base (no duplica)
+    post(c, "/flota", {"archivo": (xlsx(filas[:11]), "BASE2.xlsx")}, "/flota")
+    d = A._conectar()
+    try: assert d.execute("SELECT COUNT(*) n FROM flota").fetchone()["n"] == 10
+    finally: d.close()
+
 if __name__ == "__main__":
     fallos = 0
     for nombre, fn in list(globals().items()):
