@@ -31,13 +31,15 @@
   <h3 style="margin-bottom:16px">Archivos importados</h3>
   <div class="tabla-wrap">
   <table>
-    <tr><th>Archivo</th><th class="num">Movs.</th><th class="num">Suma extraída</th><th class="num ocultar-mov">Total doc.</th><th>Control</th><th></th></tr>
+    <tr><th>Archivo</th><th class="num">Movs.</th><th class="num">Suma extraída (pases)</th><th class="num ocultar-mov">Neto doc.</th><th class="num ocultar-mov">Bonificación</th><th class="num">Total a pagar</th><th>Control</th><th></th></tr>
     {% for a in archivos %}
     <tr>
       <td>{{ a.archivo }}</td>
       <td class="num">{{ a.n }}</td>
       <td class="num">{{ a.t|pesos }}</td>
       <td class="num ocultar-mov">{% if a.td %}{{ a.td|pesos }}{% else %}—{% endif %}</td>
+      <td class="num ocultar-mov">{% if a.bon %}-{{ a.bon|pesos }}{% else %}—{% endif %}</td>
+      <td class="num"><b>{% if a.tp %}{{ a.tp|pesos }}{% else %}—{% endif %}</b></td>
       <td>{% if not a.td %}<span class="pill sin">Sin control</span>{% elif (a.td - a.t)|abs < 1 %}<span class="pill ok">OK</span>{% else %}<span class="pill aviso">Difiere {{ (a.td - a.t)|abs|pesos }}</span>{% endif %}</td>
       <td class="num">
         <form method="post" action="/movimientos/borrar" onsubmit="return confirm('¿Eliminar los movimientos de este archivo?')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
@@ -46,7 +48,7 @@
         </form>
       </td>
     </tr>
-    {% else %}<tr><td colspan="6" class="td-vacio">{{ vacio('archivo', 'Todavía no importaste archivos', 'Subí tu primera factura con el cuadro de arriba.') }}</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="8" class="td-vacio">{{ vacio('archivo', 'Todavía no importaste archivos', 'Subí tu primera factura con el cuadro de arriba.') }}</td></tr>{% endfor %}
   </table>
   </div>
 </div>

@@ -15,6 +15,15 @@ Tests: `python3 tests/test_lectura_peajes.py`.
 `total_doc` = **neto sin IVA** que declara la factura (primera cifra de la fila de totales: Subtotal / Gravado; en Caminos la tercera: Subtotal) **menos los ajustes sin TAG** que forman parte de ese neto (`GASTOS ADMINISTRATIVOS`, `BONIFICACION…`). Así se compara contra la suma de los pases. Tolerancia de $1 (las facturas redondean por línea; difieren en centavos). `AJUSTE CONTRIBUCION ESPECIAL` de AUSA es "No gravado" y no entra en el neto.
 Los ajustes sin TAG no se guardan como movimientos (no pertenecen a una unidad); quedan en `ajustes` del resultado de `parsear_factura_peajes`.
 
+## Total a pagar y bonificación (solo para control, no son movimientos)
+Se guardan en `archivos.total_pagar` y `archivos.bonificacion` (0 si no se encuentra) y se muestran en /importar, /ver/factura y el modal.
+`total_pagar` = importe final de la factura (con IVA e impuestos, bonificación ya descontada), sin el recargo del 5%. Patrón por emisor:
+- AUBASA, Mercosur, GCO, AP01: línea `TOTAL A PAGAR <importe>` de la última hoja (se ignora `TOTAL A PAGAR * VER ULTIMA HOJA *`).
+- CEAMSE y AUSOL: última cifra de la fila de totales (`... TOTAL`).
+- AUSA: línea `Total` y el importe en la línea siguiente.
+- Caminos de las Sierras: `... Total 967922.86` al final de la fila de totales.
+`bonificacion` = suma (en positivo) de las líneas con `BONIF` (`BONIFICACION PROMO TELEPEAJE` sin TAG en AP01, `BONIFICACION TIGRE` en AUSOL). Los gastos administrativos no se descuentan ni se guardan.
+
 ## Catálogo
 
 | # | Emisor | Detección (encabezado) | ID | Decimal | Línea típica | Particularidad |

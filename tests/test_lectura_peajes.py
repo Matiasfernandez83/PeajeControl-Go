@@ -31,6 +31,31 @@ def test_norm_tag_ultimos_8():
 def test_norm_patente():
     eq(A.norm_patente(" ac-556 ch"), "AC556CH")
 
+# --- total a pagar y bonificacion (surfaceados para control; no se guardan como movimientos) ---
+def test_total_a_pagar_por_emisor():
+    # AUBASA / Mercosur / GCO / AP01: "TOTAL A PAGAR <importe>" (la ultima hoja; la primera dice VER ULTIMA HOJA)
+    tp = lambda t: A._total_a_pagar(t)
+    eq(tp("TOTAL A PAGAR * VER ULTIMA HOJA * TOTAL CON RECARGO 2.416.535,72\nTOTAL A PAGAR 2301462,59 TOTAL CON RECARGO 2.416.535,72"), 2301462.59, "AUBASA")
+    eq(tp("TOTAL A PAGAR 1.103.284,35 TOTAL CON RECARGO 1.158.448,58"), 1103284.35, "Mercosur/GCO")
+    # CEAMSE: ultima cifra de la fila de totales
+    eq(tp("2.277.365,29 0,00 2.277.365,29 478.246,71 0,00 68.320,96 6.832,10 2.830.765,06"), 2830765.06, "CEAMSE")
+    eq(tp("311.884,32 0,00 311.884,32 65.495,71 0,00 0,00 935,65 9.356,53 387.672,21"), 387672.21, "AUSOL")
+    eq(tp("Gravado No Gravado IVA\n124.939,35 0,19 26.237,24 3.748,18 0,00 12.493,96\nTotal\n167.418,92\nRegimen"), 167418.92, "AUSA")
+    eq(tp("799936.25 0.00 799936.25 167986.61 0,00 Total 967922.86"), 967922.86, "Caminos")
+    eq(tp("sin totales"), 0.0, "sin total")
+
+def test_bonificacion_ap01():
+    r = A.analizar_texto_peajes("""AUTOPISTA PROVINCIAL AP 01
+Fecha: 01/08/2026
+Cantidad Descripción Importe
+3 TRONCAL ALDAO-CAT.4 SI9094392549 483.800,00
+BONIFICACION PROMO TELEPEAJE -100.240,00
+Subtotal IVA Resp.Inscripto IVA Resp.No Inscr. IVA RG.3337 Percepción II.BB. TOTAL
+TOTAL A PAGAR 383.560,00 TOTAL CON RECARGO 383.560,00
+383.560,00 0,00 383.560,00 0,00 0,00 0,00 0,00 383.560,00""")
+    eq(r["bonificacion"], 100240.0, "bonificacion"); eq(r["total_pagar"], 383560.0, "total a pagar")
+    eq(len(r["items"]), 1, "la bonificacion no es un movimiento")
+
 # --- un caso por emisor (fragmentos de facturas reales) ---
 def test_ausa():
     r, it = leer("""AUTOPISTAS URBANAS S.A.

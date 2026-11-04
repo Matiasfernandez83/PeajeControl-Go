@@ -521,7 +521,9 @@ async function abrirDetalle(tipo,val){
     document.getElementById('modal-titulo').textContent=d.titulo+' ('+d.filas.length+')';
     const abrir=d.pagina?'<p class="mini" style="margin:12px 0"><a class="btn chico sec" href="'+esc(d.pagina)+'" target="_blank" rel="noopener">Abrir en pestaña nueva</a></p>':'';
     if(!d.filas.length){document.getElementById('modal-cuerpo').innerHTML=vacioHtml('bandeja','Sin registros','No hay datos para mostrar en esta tarjeta.');return;}
-    let h='<div class="tabla-wrap"><table><thead><tr>';
+    let fc='';
+    if(d.factura){const f=d.factura;fc='<div class="tabla-wrap" style="margin-bottom:12px"><table><thead><tr><th class=num>Suma extraída (pases)</th><th class=num>Neto doc.</th><th class=num>Bonificación</th><th class=num>Total a pagar</th></tr></thead><tbody><tr><td class=num>'+pesos(f.suma)+'</td><td class=num>'+(f.total_doc?pesos(f.total_doc):'—')+'</td><td class=num>'+(f.bonificacion?'-'+pesos(f.bonificacion):'—')+'</td><td class=num><b>'+(f.total_pagar?pesos(f.total_pagar):'—')+'</b></td></tr></tbody></table></div>';}
+    let h=fc+'<div class="tabla-wrap"><table><thead><tr>';
     if(d.modo==='grupo'){
       h+='<th>Responsable</th><th class=num>Operaciones</th><th class=num>Patentes</th><th class=num>Monto</th></tr></thead><tbody>';
       d.filas.forEach(f=>{h+=`<tr><td><b>${esc(f.dueno)}</b></td><td class=num>${esc(f.n)}</td><td class=num>${esc(f.patentes)}</td><td class=num>${pesos(f.monto)}</td></tr>`;});
