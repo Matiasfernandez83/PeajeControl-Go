@@ -24,3 +24,9 @@ corre en **PostgreSQL gratuito de Supabase**. Pasos detallados en [`docs/DEPLOY.
 - Start: gunicorn app:app --workers 1 --timeout 120
 - `SECRET_KEY` se genera sola; hay que cargar **`DATABASE_URL`** (conexion de Supabase)
   a mano en el dashboard de Render.
+
+## Tests
+    python3 -m pytest tests            # contra SQLite (rapido)
+    bash tests/run_pg_tests.sh         # contra un PostgreSQL real y efimero (se levanta y se borra solo)
+La segunda corrida atrapa bugs que SQLite no ve (columnas faltantes en tablas viejas, cargas masivas lentas).
+Para usar un PostgreSQL propio: `TEST_DATABASE_URL=postgresql://... python3 -m pytest tests` (solo bases locales o con "test" en el nombre: se vacian).

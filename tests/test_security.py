@@ -1,12 +1,7 @@
-# Tests de seguridad + flujo completo. Corre con SQLite local: python3 tests/test_security.py
-import io, os, re, sys, tempfile
-RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, RAIZ)
-os.environ.pop("DATABASE_URL", None)
-os.environ["ADMIN_PASSWORD"] = "clave-de-test-123"
-os.environ["SECRET_KEY"] = "secret-de-test"
-_tmp = tempfile.mkdtemp()
-os.environ["DB_PATH"] = os.path.join(_tmp, "test.db")
+# Tests de seguridad + flujo completo. SQLite: python3 tests/test_security.py  |  PostgreSQL: bash tests/run_pg_tests.sh
+import io, os, re, sys
+import _entorno   # elige SQLite o PostgreSQL (TEST_DATABASE_URL) y prepara las variables antes de importar app
+RAIZ, _tmp = _entorno.RAIZ, _entorno.TMP
 
 import app as A
 from openpyxl import Workbook, load_workbook
@@ -41,6 +36,11 @@ def xlsx(filas):
     b = io.BytesIO(); wb.save(b); b.seek(0); return b
 
 # ---------------- tests ----------------
+def _skip(motivo):
+    if "PYTEST_CURRENT_TEST" in os.environ:
+        import pytest; pytest.skip(motivo)
+    print(f"  (salteado: {motivo})")
+
 def test_rutas_exigen_login():
     c = cliente()
     for ruta in ["/", "/movimientos", "/importar", "/flota", "/gastos", "/reportes", "/config",
@@ -290,6 +290,7 @@ def test_flota_abm_manual():
 
 def test_migracion_agrega_columnas_faltantes():
     # Caso produccion: tabla archivos vieja SIN total_doc -> migrar la completa y /importar anda.
+    if A.USE_PG: return _skip("version SQLite; en PostgreSQL corre test_migracion_agrega_columnas_faltantes_postgres")
     import sqlite3
     cx = sqlite3.connect(os.path.join(_tmp, "vieja.db")); cx.row_factory = sqlite3.Row
     cx.execute("CREATE TABLE archivos(id INTEGER PRIMARY KEY, nombre TEXT, tipo TEXT)")
@@ -323,7 +324,7 @@ def test_flota_importar_base_post():
     d = A._conectar()
     try:
         n = d.execute("SELECT COUNT(*) n FROM flota WHERE dueno='REQUIERE APROB GP' AND estado='ACTIVO' "
-                      "AND marca='IVECO' AND equipo LIKE 'EQUIPO %'").fetchone()["n"]
+                      "AND marca='IVECO' AND equipo LIKE ?", ("EQUIPO %",)).fetchone()["n"]
         total = d.execute("SELECT COUNT(*) n FROM flota").fetchone()["n"]
     finally:
         d.close()
@@ -393,6 +394,89 @@ def test_trazabilidad_factura_pdf_y_detalle_paginado():
     hm = c.get("/movimientos").get_data(as_text=True)
     assert "Página 1 de" in hm and f"/archivo/{aid}" in hm
     assert "target=\"_blank\"" in c.get("/movimientos?vista=vehiculo").get_data(as_text=True)
+
+# ---------------- tests especificos de PostgreSQL (se saltean en SQLite) ----------------
+def test_backend_es_el_pedido():
+    # Evita el peor error de esta bateria: creer que se probo PostgreSQL cuando se probo SQLite.
+    assert A.USE_PG == bool(os.environ.get("TEST_DATABASE_URL")), "el backend usado no es el pedido"
+
+def test_esquema_cubre_columnas_esperadas():
+    # Toda columna que el codigo espera debe existir en la base real (en SQLite y en PostgreSQL).
+    d = A._conectar()
+    try:
+        for tabla, cols in A._columnas_esperadas().items():
+            faltan = {c for c, _ in cols} - A._columnas(d, tabla)
+            assert not faltan, f"{tabla}: faltan columnas {faltan}"
+    finally:
+        d.close()
+
+def test_migracion_agrega_columnas_faltantes_postgres():
+    # Bug de produccion #1: archivos sin total_doc. CREATE TABLE IF NOT EXISTS no hace ALTER;
+    # migrar() tiene que completar la tabla vieja en PostgreSQL real.
+    if not A.USE_PG: return _skip("solo PostgreSQL")
+    import psycopg2, psycopg2.extensions, secrets
+    nombre = "vieja_" + secrets.token_hex(4)
+    admin = psycopg2.connect(os.environ["DATABASE_URL"]); admin.autocommit = True
+    admin.cursor().execute(f"CREATE DATABASE {nombre}")
+    raw = psycopg2.connect(psycopg2.extensions.make_dsn(os.environ["DATABASE_URL"], dbname=nombre))
+    try:
+        cur = raw.cursor()
+        cur.execute("CREATE TABLE archivos(id SERIAL PRIMARY KEY, nombre TEXT, tipo TEXT)")
+        cur.execute("INSERT INTO archivos(nombre,tipo) VALUES('a.pdf','Peajes')")
+        cur.execute("CREATE TABLE movimientos(id SERIAL PRIMARY KEY, fecha TEXT, tag TEXT, monto DOUBLE PRECISION)")
+        cur.execute("INSERT INTO movimientos(fecha,tag,monto) VALUES('01/01/2026','12345678',10)")
+        for t in ("usuarios", "flota", "resumenes", "gastos"):
+            cur.execute(f"CREATE TABLE {t}(id SERIAL PRIMARY KEY)")
+        raw.commit()
+        con = A.PGConn.__new__(A.PGConn); con._conn = raw; con._bad = False   # PGConn sobre esta base, sin pool
+        A.migrar(con)
+        assert "total_doc" in A._columnas(con, "archivos"), "migrar no agrego archivos.total_doc"
+        assert {"archivo", "dueno", "verificado"} <= A._columnas(con, "movimientos")
+        assert {"empresa_id", "clave", "rol"} <= A._columnas(con, "usuarios")
+        assert con.execute("SELECT total_doc FROM archivos").fetchone()["total_doc"] == 0
+        assert con.execute("SELECT COUNT(*) n FROM movimientos").fetchone()["n"] == 1, "se perdieron datos"
+        A.migrar(con)   # idempotente
+        con.commit()
+    finally:
+        raw.close()
+        admin.cursor().execute(f"DROP DATABASE IF EXISTS {nombre}")
+        admin.close()
+
+def test_flota_carga_masiva_en_bloques_postgres():
+    # Bug de produccion #2: executemany hacia 1 viaje por fila -> timeout del worker en POST /flota.
+    # Con la base local no se nota la demora, asi que se cuenta: las filas deben viajar en bloques.
+    if not A.USE_PG: return _skip("solo PostgreSQL")
+    import psycopg2.extensions, time
+    llamadas = []
+    class Cuenta(psycopg2.extensions.cursor):
+        def execute(self, *a, **k):
+            llamadas.append(1); return super().execute(*a, **k)
+        def executemany(self, *a, **k):
+            raise AssertionError("executemany: 1 viaje por fila (era el bug de produccion)")
+    pool = A._get_pool()
+    original = pool.getconn
+    def getconn(*a, **k):
+        c = original(*a, **k); c.cursor_factory = Cuenta; return c
+    pool.getconn = getconn
+    N = 1500
+    try:
+        c = logueado()
+        filas = [["NUMERO DE TAG", "PATENTE", "RESPONSABLE", "EQUIPO", "ESTADO", "MARCA"]]
+        for i in range(N):
+            filas.append([f"8000{i:04d}", f"BT{i:04d}", "RESP", f"EQ {i}", "ACTIVO", "IVECO"])
+        t0 = time.time()
+        r = post(c, "/flota", {"archivo": (xlsx(filas), "GRANDE.xlsx")}, "/flota")
+        seg = time.time() - t0
+    finally:
+        pool.getconn = original
+        for conn in list(pool._pool) + list(pool._used.values()):
+            conn.cursor_factory = None
+    assert r.status_code == 302, r.status_code
+    d = A._conectar()
+    try: assert d.execute("SELECT COUNT(*) n FROM flota").fetchone()["n"] == N
+    finally: d.close()
+    assert 1 <= len(llamadas) <= -(-N // 500) + 1, f"{len(llamadas)} envios para {N} filas: no va en bloques"
+    assert seg < 20, f"cargar {N} equipos tardo {seg:.1f}s"
 
 if __name__ == "__main__":
     fallos = 0
