@@ -60,6 +60,21 @@ def test_headers_seguridad():
         assert parte in csp, f"falta en CSP: {parte}"
     assert "Strict-Transport-Security" not in h  # solo en produccion
 
+def test_estaticos_css_js():
+    """Los CSS y JS viven en static/ y cada pagina los referencia con un enlace que realmente responde."""
+    c = cliente(); logueado_c = logueado()
+    paginas = [(c, "/login"), (c, "/landing")] + [(logueado_c, r) for r in ("/", "/flota", "/config", "/importar")]
+    for cli, ruta in paginas:
+        html = cli.get(ruta).get_data(as_text=True)
+        enlaces = re.findall(r'(?:href|src)="(/static/[^"]+)"', html)
+        assert enlaces, f"{ruta}: no referencia archivos de /static"
+        for url in enlaces:
+            r = c.get(url)                     # sin sesion: los estaticos son publicos
+            assert r.status_code == 200, f"{ruta}: {url} -> {r.status_code}"
+            assert len(r.get_data()) > 50
+        assert "<style" not in html, f"{ruta}: quedo CSS embebido en la plantilla"
+        assert html.count("<script>") <= 1, f"{ruta}: quedo JavaScript embebido (solo se admite el del tema en <head>)"
+
 def test_csrf():
     A.INTENTOS.clear()
     c = cliente(); c.get("/login")

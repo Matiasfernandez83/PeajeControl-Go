@@ -1,5 +1,5 @@
 # PeajeControl Go - Flask + pdfplumber. BD: SQLite (dev) o PostgreSQL (prod, via DATABASE_URL). Sin IA, sin API keys.
-import csv, io, os, re, sqlite3, base64, json, secrets, hmac, time, unicodedata
+import csv, io, os, re, sqlite3, base64, secrets, hmac, time, unicodedata
 from collections import defaultdict
 from datetime import datetime, timedelta
 from urllib.parse import quote

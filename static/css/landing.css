@@ -1,0 +1,135 @@
+/* PeajeControl Go - estilos de la portada publica (templates/landing.html). Pagina independiente de la app:
+   tiene sus propias variables y sigue el modo claro/oscuro del sistema (prefers-color-scheme). */
+:root{
+  --rojo:#E30613; --lima:#DFFF00; --azul:#3b82f6; --verde:#16a34a;
+  --fondo:#f4f4f5; --panel:#ffffff; --borde:#e4e4e7; --gris:#64748b; --tinta:#141414;
+  --radio:12px; --radio-ch:8px;
+  --sombra:0 1px 2px rgba(20,20,20,.04),0 8px 24px -12px rgba(20,20,20,.14);
+  --sombra-h:0 1px 2px rgba(20,20,20,.04),0 12px 28px -12px rgba(20,20,20,.22);
+  --oscuro:#0d1119; --txt:#e8edf5; --txt2:#9aa6b8; --linea:rgba(255,255,255,.1);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){--fondo:#0d1119;--panel:#161c27;--borde:#252d3b;--gris:#9aa6b8;--tinta:#e8edf5;
+    --sombra:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.6);--sombra-h:0 12px 28px -12px rgba(0,0,0,.7)}
+}
+:root[data-theme="dark"]{--fondo:#0d1119;--panel:#161c27;--borde:#252d3b;--gris:#9aa6b8;--tinta:#e8edf5;
+  --sombra:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.6);--sombra-h:0 12px 28px -12px rgba(0,0,0,.7)}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+body{font-family:'Inter',system-ui,sans-serif;font-feature-settings:'tnum';font-weight:400;font-size:15px;line-height:1.55;
+  background:var(--fondo);color:var(--tinta);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.ic-box{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  color:var(--ac,var(--azul));background:color-mix(in srgb,var(--ac,var(--azul)) 12%,transparent)}
+.ic-box .i{width:20px;height:20px}
+.ac-rojo{--ac:#E30613}.ac-azul{--ac:#3b82f6}.ac-verde{--ac:#16a34a}
+.wrap{max-width:1080px;margin:0 auto;padding:0 max(20px,env(safe-area-inset-left,0px))}
+
+/* Marca: se conserva tal cual */
+.wm{display:flex;align-items:center;gap:10px}
+.wm-ico{width:44px;height:44px;flex-shrink:0}
+.wm-stack{display:flex;flex-direction:column;line-height:.86;font-weight:800;color:#fff;letter-spacing:.4px;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif}
+.wm-stack div{font-size:19px}
+.wm-go{font-family:Georgia,'Times New Roman',serif;font-size:30px;font-weight:900;font-style:italic;color:var(--rojo);letter-spacing:-1px;line-height:.9}
+.wm-go b{font-size:21px;vertical-align:top;font-style:normal}
+
+/* Botones */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:46px;padding:0 22px;border-radius:var(--radio-ch);
+  font-family:inherit;font-weight:600;font-size:14.5px;text-decoration:none;cursor:pointer;border:1px solid transparent;
+  transition:background .15s,box-shadow .15s,transform .15s,border-color .15s}
+.btn:focus-visible{outline:0;box-shadow:0 0 0 3px rgba(59,130,246,.45)}
+.btn-rojo{background:var(--rojo);color:#fff;box-shadow:0 10px 30px -8px rgba(227,6,19,.55),inset 0 1px 0 rgba(255,255,255,.18)}
+.btn-rojo:hover{background:#c00511}
+.btn-vidrio{background:rgba(255,255,255,.06);color:#fff;border-color:var(--linea)}
+.btn-vidrio:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.25)}
+.btn-sm{height:38px;padding:0 16px;font-size:13.5px}
+.btn-blanco{background:#fff;color:var(--rojo)}
+.btn-blanco:hover{background:#f4f4f5}
+.btn .i{width:16px;height:16px}
+
+/* Hero */
+.hero{position:relative;overflow:hidden;color:var(--txt);isolation:isolate;
+  background:radial-gradient(1100px 760px at 82% 10%,#1c2636 0%,transparent 60%),
+  radial-gradient(900px 700px at 12% 95%,#141b29 0%,transparent 55%),linear-gradient(135deg,#0a0d12,#0d1119 60%,#0a0e15)}
+#net{position:absolute;inset:0;width:100%;height:100%;z-index:-2;display:block}
+.hero::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background:linear-gradient(90deg,rgba(10,13,18,.7) 0%,rgba(10,13,18,.4) 55%,rgba(10,13,18,0) 100%)}
+.nav{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 0}
+.hero-cuerpo{padding:clamp(48px,9vw,110px) 0 clamp(56px,9vw,120px);display:flex;flex-direction:column;gap:20px;align-items:flex-start}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.06);border:1px solid var(--linea);
+  color:var(--txt);font-weight:500;font-size:12.5px;padding:6px 12px;border-radius:100px}
+.eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--lima)}
+.hero h1{font-size:clamp(30px,5.4vw,52px);line-height:1.1;font-weight:700;letter-spacing:-.025em;color:#fff;max-width:20ch;text-wrap:balance}
+.hero h1 em{font-style:normal;color:var(--rojo)}
+.hero .bajada{font-size:clamp(15.5px,2vw,18px);color:#c3ccda;max-width:62ch}
+.hero .acciones{display:flex;gap:12px;flex-wrap:wrap;margin-top:6px}
+.hero .producto{display:flex;gap:10px;align-items:center;color:var(--txt2);font-size:13px;margin-top:6px}
+.hero .producto b{color:#fff;font-weight:600}
+
+/* Secciones */
+section.bloque{padding:clamp(40px,6vw,72px) 0}
+section.bloque.pegado{padding-top:0}
+.rotulo{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--rojo);margin-bottom:8px}
+h2.titulo{font-size:clamp(22px,3.2vw,30px);font-weight:700;letter-spacing:-.02em;line-height:1.2;margin-bottom:28px;text-wrap:balance}
+.tarjeta{background:var(--panel);border:1px solid var(--borde);border-radius:var(--radio);box-shadow:var(--sombra);padding:24px;
+  transition:box-shadow .15s,transform .15s}
+.tarjeta:hover{transform:translateY(-1px);box-shadow:var(--sombra-h)}
+.tarjeta h3{font-size:15px;font-weight:600;margin:16px 0 6px}
+.tarjeta p{font-size:13.5px;color:var(--gris)}
+.grilla{display:grid;gap:16px}
+.g3{grid-template-columns:repeat(3,1fr)}
+
+.paso .n{font-size:12px;font-weight:600;color:var(--gris);margin-top:16px;font-variant-numeric:tabular-nums}
+.paso h3{margin-top:4px}
+
+/* Franja oscura de beneficios */
+.franja{background:var(--oscuro);color:var(--txt);border-radius:var(--radio);padding:clamp(24px,4vw,40px);
+  display:grid;grid-template-columns:repeat(3,1fr);gap:28px;border:1px solid #1d2535}
+.franja .big{font-size:clamp(20px,2.6vw,26px);font-weight:700;letter-spacing:-.02em;line-height:1.2;color:#fff}
+.franja .big u{text-decoration:none;color:var(--lima)}
+.franja p{margin-top:8px;font-size:13.5px;color:var(--txt2)}
+.franja .i{width:22px;height:22px;color:var(--rojo);margin-bottom:12px}
+
+/* Features */
+.feats{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.feat{display:flex;gap:14px;align-items:flex-start;background:var(--panel);border:1px solid var(--borde);
+  border-radius:var(--radio);padding:16px 18px;box-shadow:var(--sombra)}
+.feat p{font-size:13.5px;color:var(--gris);padding-top:2px}
+.feat b{color:var(--tinta);font-weight:600}
+
+/* Planes */
+.plan{display:flex;flex-direction:column;gap:6px;position:relative}
+.plan.destacado{border-color:var(--rojo);box-shadow:0 0 0 1px var(--rojo),var(--sombra)}
+.plan .et{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--gris)}
+.plan .flota{font-size:21px;font-weight:700;letter-spacing:-.02em}
+.plan .badge{align-self:flex-start;background:var(--rojo);color:#fff;font-size:11px;font-weight:600;padding:3px 10px;border-radius:100px;margin-bottom:4px}
+.plan p{font-size:13.5px;color:var(--gris)}
+
+/* CTA final */
+.cta{background:var(--rojo);border-radius:var(--radio);padding:clamp(26px,4vw,40px);color:#fff;
+  display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;
+  box-shadow:0 20px 50px -20px rgba(227,6,19,.55)}
+.cta h2{font-size:clamp(21px,3vw,28px);font-weight:700;letter-spacing:-.02em;line-height:1.2;max-width:20ch;text-wrap:balance}
+.cta .datos{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.cta .datos a.dato{color:#fff;text-decoration:none;display:inline-flex;align-items:center;gap:10px;font-weight:500;font-size:14px}
+.cta .datos a.dato:hover{text-decoration:underline}
+.cta .datos .btn{margin-top:6px}
+
+footer.pie{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;
+  color:var(--gris);font-size:12.5px;border-top:1px solid var(--borde);padding:22px 0 32px;margin-top:clamp(36px,5vw,56px)}
+.sinia{display:inline-flex;align-items:center;gap:6px;font-weight:600;color:var(--verde)}
+.sinia .i{width:16px;height:16px}
+
+@media(max-width:860px){
+  .g3,.franja{grid-template-columns:1fr}
+  .feats{grid-template-columns:1fr}
+  .hero::after{background:linear-gradient(180deg,rgba(10,13,18,.7),rgba(10,13,18,.55))}
+}
+@media(max-width:520px){
+  .wm-ico{width:38px;height:38px}.wm-stack div{font-size:16px}.wm-go{font-size:25px}.wm-go b{font-size:17px}
+  .hero .acciones .btn{flex:1 1 100%}
+  .cta .datos,.cta .datos .btn{width:100%}
+  .tarjeta{padding:20px}
+}
+@media print{ #net{display:none}}
