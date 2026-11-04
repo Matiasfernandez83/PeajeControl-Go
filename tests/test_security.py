@@ -424,6 +424,31 @@ def test_sin_match_agrupado_y_agregar_a_flota():
     assert "No falta" in c.get("/sin-match").get_data(as_text=True)
     cx.execute("DELETE FROM movimientos WHERE empresa_id=1"); cx.execute("DELETE FROM flota WHERE empresa_id=1"); cx.commit()
 
+def test_reasignacion_automatica():
+    c = logueado(); cx = A._conectar()
+    cx.execute("DELETE FROM movimientos WHERE empresa_id=1"); cx.execute("DELETE FROM flota WHERE empresa_id=1")
+    for tag in ("81000001", "81000002", "81000003"):
+        cx.execute("INSERT INTO movimientos(empresa_id,fecha,tag,patente,concepto,monto,verificado,archivo) VALUES(1,'01/10/2026',?,'',"
+                   "'PEAJE X',100,0,'F.pdf')", (tag,))
+    cx.commit()
+    def mov(tag):
+        return cx.execute("SELECT dueno,equipo,verificado FROM movimientos WHERE empresa_id=1 AND tag=?", (tag,)).fetchone()
+    # alta: el movimiento ya cargado se asigna solo y sale de /sin-match
+    post(c, "/flota/agregar", {"tag": "81000001", "patente": "AA111BB", "dueno": "JUAN", "equipo": "Camion 1", "volver": "/sin-match"}, "/sin-match")
+    m = mov("81000001"); assert (m[0], m[1], m[2]) == ("JUAN", "Camion 1", 1)
+    assert "81000001" not in c.get("/sin-match").get_data(as_text=True)
+    assert mov("81000002")[2] == 0, "otro TAG sin flota no se toca"
+    # edicion: cambia el responsable y se refleja
+    fid = cx.execute("SELECT id FROM flota WHERE empresa_id=1 AND tag='81000001'").fetchone()[0]
+    post(c, f"/flota/editar/{fid}", {"tag": "81000001", "patente": "AA111BB", "dueno": "PEDRO", "equipo": "Camion 9"}, "/flota")
+    m = mov("81000001"); assert (m[0], m[1], m[2]) == ("PEDRO", "Camion 9", 1)
+    # re-subir la base completa reasigna todo
+    r = post(c, "/flota", {"archivo": (xlsx([["TAG", "PATENTE", "DUENO", "EQUIPO"], ["81000002", "CC222DD", "ANA", "Semi 2"],
+                                            ["81000003", "EE333FF", "LUIS", "Semi 3"]]), "base.xlsx")}, "/flota")
+    for tag, dn, eq in (("81000002", "ANA", "Semi 2"), ("81000003", "LUIS", "Semi 3")):
+        m = mov(tag); assert (m[0], m[1], m[2]) == (dn, eq, 1), (tag, tuple(m))
+    cx.execute("DELETE FROM movimientos WHERE empresa_id=1"); cx.execute("DELETE FROM flota WHERE empresa_id=1"); cx.commit()
+
 if __name__ == "__main__":
     fallos = 0
     for nombre, fn in list(globals().items()):

@@ -6,7 +6,7 @@
 <div class="tarjeta">
   <p class="mini">Estos TAGs aparecen en las facturas cargadas pero <b>no están en tu base de flota</b>, por eso su plata
   figura "sin asignar". Con <b>Agregar a la flota</b> se abre el alta con el TAG ya cargado: completá responsable y equipo y guardá.
-  Después de agregarlo, el TAG desaparece de esta lista; las facturas ya cargadas se asignan al volver a importarlas.</p>
+  Después de agregarlo, el TAG desaparece de esta lista; la plata de las facturas ya cargadas se asigna al instante, sin reimportar.</p>
   <div class="linea" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between">
     <h3 style="margin:0">{{ tot.tags }} TAG{{ '' if tot.tags == 1 else 's' }} faltante{{ '' if tot.tags == 1 else 's' }}
       <span class="mini" style="margin:0">· {{ tot.n }} pasadas · {{ tot.t|pesos }}</span></h3>
