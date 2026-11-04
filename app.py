@@ -100,10 +100,16 @@ if USE_PG:
         def __init__(self):
             self._conn = _get_pool().getconn()
             self._bad = False
+        @staticmethod
+        def _sql(sql):
+            # psycopg2 usa % como marca de parametro: un % literal escrito a mano (ej. LIKE '%x%')
+            # revienta con IndexError. Primero se duplican los % del SQL de entrada y recien despues
+            # se cambian los ? por %s (en ese orden, para no escapar los %s que genera este metodo).
+            return sql.replace("%", "%%").replace("?", "%s")
         def execute(self, sql, params=()):
             try:
                 cur = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-                cur.execute(sql.replace("?", "%s"), params)
+                cur.execute(self._sql(sql), params)
                 return _Cur(cur)
             except (psycopg2.OperationalError, psycopg2.InterfaceError):
                 self._bad = True; raise
@@ -112,7 +118,7 @@ if USE_PG:
                 # execute_batch manda las filas en bloques (1 viaje por bloque, no 1 por fila): con la
                 # base remota, executemany tardaba >120s con ~800 filas y gunicorn mataba el worker.
                 cur = self._conn.cursor()
-                psycopg2.extras.execute_batch(cur, sql.replace("?", "%s"), list(seq), page_size=500)
+                psycopg2.extras.execute_batch(cur, self._sql(sql), list(seq), page_size=500)
                 cur.close()
             except (psycopg2.OperationalError, psycopg2.InterfaceError):
                 self._bad = True; raise
