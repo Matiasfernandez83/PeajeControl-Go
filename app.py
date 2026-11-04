@@ -903,6 +903,26 @@ def flota_plantilla():
     return send_file(b, as_attachment=True, download_name="plantilla_flota.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
+def resync_movimientos(d, tags=None):
+    """Reasigna los movimientos YA cargados de la empresa cuyo TAG esta en la flota:
+    dueno/equipo/patente de la unidad y verificado=1. tags=None -> toda la flota.
+    Mismo criterio que el matching al importar (TAG normalizado a 8 digitos). No toca montos."""
+    E = emp()
+    def sub(col, base=None):
+        v = f"f.{col}" if base is None else f"COALESCE(NULLIF(f.{col},''), {base})"
+        return (f"(SELECT {v} FROM flota f WHERE f.empresa_id=movimientos.empresa_id "
+                f"AND f.tag=movimientos.tag LIMIT 1)")
+    sql = (f"UPDATE movimientos SET dueno=COALESCE({sub('dueno')},''), equipo=COALESCE({sub('equipo')},''), "
+           f"patente=COALESCE({sub('patente','movimientos.patente')},''), verificado=1 WHERE empresa_id=? AND tag<>''")
+    if tags is None:
+        d.execute(sql + " AND tag IN (SELECT tag FROM flota WHERE empresa_id=? AND tag<>'')", (E, E))
+    else:
+        tags = sorted({norm_tag(t) for t in tags if norm_tag(t)})
+        for i in range(0, len(tags), 500):
+            lote = tags[i:i + 500]
+            d.execute(sql + " AND tag IN (SELECT tag FROM flota WHERE empresa_id=? AND tag<>'') AND tag IN (%s)"
+                      % ",".join("?" * len(lote)), [E, E] + lote)
+
 FLOTA_POR_PAGINA = 50
 
 @app.route("/flota", methods=["GET", "POST"])
@@ -928,6 +948,7 @@ def flota():
                     nuevos.append((emp(), t, get("patente").upper(), get("dueno"), get("equipo"), get("estado"), get("marca")))
             d.execute("DELETE FROM flota WHERE empresa_id=?", (emp(),))
             d.executemany("INSERT INTO flota(empresa_id,tag,patente,dueno,equipo,estado,marca) VALUES(?,?,?,?,?,?,?)", nuevos)
+            resync_movimientos(d)   # las facturas ya cargadas toman responsable/equipo al instante
             d.commit()
             flash(f"Base actualizada: {len(nuevos)} unidades unicas.")
         return redirect("/flota")
@@ -975,8 +996,32 @@ def flota_agregar():
     else:
         d.execute("INSERT INTO flota(empresa_id,tag,patente,dueno,equipo,estado,marca) VALUES(?,?,?,?,?,?,?)",
                   (emp(), tag, pat, dueno, equipo, estado, marca))
+        resync_movimientos(d, [tag])
         d.commit(); flash("Equipo agregado.")
-    return redirect("/flota")
+    return redirect("/sin-match" if request.form.get("volver") == "/sin-match" else "/flota")
+
+# --- TAGs que aparecen en los movimientos pero NO estan en la flota de la empresa ---
+SIN_MATCH_FROM = ("FROM movimientos WHERE empresa_id=? AND tag IS NOT NULL AND tag<>'' AND tag NOT IN "
+                  "(SELECT tag FROM flota WHERE empresa_id=? AND tag IS NOT NULL AND tag<>'')")
+
+@app.route("/sin-match")
+def sin_match():
+    d = db(); E = emp(); a = (E, E)
+    tot = d.execute("SELECT COUNT(DISTINCT tag) tags, COUNT(*) n, COALESCE(SUM(monto),0) t " + SIN_MATCH_FROM, a).fetchone()
+    pagina, paginas, off = paginar(tot["tags"])
+    tags = d.execute("SELECT tag, COUNT(*) n, COALESCE(SUM(monto),0) t, MAX(NULLIF(patente,'')) patente, "
+                     "MAX(NULLIF(concepto,'')) concepto " + SIN_MATCH_FROM +
+                     " GROUP BY tag ORDER BY t DESC, tag LIMIT ? OFFSET ?", a + (MOV_POR_PAGINA, off)).fetchall()
+    facturas = {}
+    if tags:
+        ph = ",".join("?" * len(tags))
+        for r in d.execute("SELECT DISTINCT m.tag, m.archivo, a.id archivo_id FROM movimientos m LEFT JOIN archivos a "
+                           "ON a.empresa_id=m.empresa_id AND a.nombre=m.archivo "
+                           f"WHERE m.empresa_id=? AND m.tag IN ({ph}) AND m.archivo IS NOT NULL ORDER BY m.archivo",
+                           [E] + [t["tag"] for t in tags]).fetchall():
+            facturas.setdefault(r["tag"], []).append(r)
+    return render_template("sin_match.html", tags=tags, facturas=facturas, tot=tot,
+                           pagina=pagina, paginas=paginas, por_pagina=MOV_POR_PAGINA)
 
 @app.route("/flota/editar/<int:fid>", methods=["POST"])
 def flota_editar(fid):
@@ -990,6 +1035,7 @@ def flota_editar(fid):
     else:
         d.execute("UPDATE flota SET tag=?,patente=?,dueno=?,equipo=?,estado=?,marca=? WHERE id=? AND empresa_id=?",
                   (tag, pat, dueno, equipo, estado, marca, fid, emp()))
+        resync_movimientos(d, [tag])
         d.commit(); flash("Equipo actualizado.")
     return redirect("/flota")
 

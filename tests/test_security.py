@@ -44,7 +44,7 @@ def xlsx(filas):
 def test_rutas_exigen_login():
     c = cliente()
     for ruta in ["/", "/movimientos", "/importar", "/flota", "/gastos", "/reportes", "/config",
-                 "/empresas", "/exportar", "/gastos/exportar", "/detalle/monto", "/ver/monto", "/archivo/1", "/factura/x.pdf"]:
+                 "/empresas", "/sin-match", "/exportar", "/gastos/exportar", "/detalle/monto", "/ver/monto", "/archivo/1", "/factura/x.pdf"]:
         r = c.get(ruta)
         assert r.status_code == 302 and "/login" in r.headers["Location"], f"{ruta} sin login: {r.status_code}"
 
@@ -393,6 +393,61 @@ def test_trazabilidad_factura_pdf_y_detalle_paginado():
     hm = c.get("/movimientos").get_data(as_text=True)
     assert "Página 1 de" in hm and f"/archivo/{aid}" in hm
     assert "target=\"_blank\"" in c.get("/movimientos?vista=vehiculo").get_data(as_text=True)
+
+def test_sin_match_agrupado_y_agregar_a_flota():
+    c = logueado(); cx = A._conectar()
+    cx.execute("DELETE FROM movimientos WHERE empresa_id=1"); cx.execute("DELETE FROM flota WHERE empresa_id=1")
+    cx.execute("INSERT INTO flota(empresa_id,tag,patente) VALUES(1,'50000001','EN111FL')")
+    mv = [("50000001", "EN111FL", 100.0, "F1.pdf"),                      # esta en flota: no aparece
+          ("60000002", "FA222LT", 300.0, "F1.pdf"), ("60000002", "", 200.0, "F2.pdf"),
+          ("70000003", "", 50.0, "F1.pdf")]
+    for tag, pat, monto, arch in mv:
+        cx.execute("INSERT INTO movimientos(empresa_id,fecha,tag,patente,concepto,monto,verificado,archivo) VALUES(1,'01/10/2026',?,?,'PEAJE X',?,0,?)",
+                   (tag, pat, monto, arch))
+    cx.commit()
+    h = c.get("/sin-match").get_data(as_text=True)
+    assert "60000002" in h and "70000003" in h and "FA222LT" in h
+    assert "50000001" not in h, "un TAG de la flota no debe aparecer"
+    assert "2 TAGs faltantes" in h.replace("\n", " ").replace("  ", " ") and "F1.pdf" in h and "F2.pdf" in h
+    assert 'data-tag="60000002" data-patente="FA222LT"' in h
+    # aislado por empresa: otra empresa no ve estos TAGs
+    post(c, "/empresas/crear", {"empresa": "Sin Match SA", "email": "sm@test.com", "clave": "smsmsmsm", "nombre": "SM"}, "/empresas")
+    c2 = cliente(); login(c2, "sm@test.com", "smsmsmsm")
+    assert "60000002" not in c2.get("/sin-match").get_data(as_text=True)
+    # agregar a la flota (mismo alta del ABM) -> desaparece y vuelve a /sin-match
+    r = post(c, "/flota/agregar", {"tag": "60000002", "patente": "FA222LT", "dueno": "JUAN", "volver": "/sin-match"}, "/sin-match")
+    assert r.status_code == 302 and r.headers["Location"].endswith("/sin-match")
+    h2 = c.get("/sin-match").get_data(as_text=True)
+    assert "60000002" not in h2 and "70000003" in h2
+    r = post(c, "/flota/agregar", {"tag": "70000003", "dueno": "X", "volver": "http://malo.com"}, "/flota")
+    assert r.headers["Location"].endswith("/flota"), "volver solo admite /sin-match"
+    assert "No falta" in c.get("/sin-match").get_data(as_text=True)
+    cx.execute("DELETE FROM movimientos WHERE empresa_id=1"); cx.execute("DELETE FROM flota WHERE empresa_id=1"); cx.commit()
+
+def test_reasignacion_automatica():
+    c = logueado(); cx = A._conectar()
+    cx.execute("DELETE FROM movimientos WHERE empresa_id=1"); cx.execute("DELETE FROM flota WHERE empresa_id=1")
+    for tag in ("81000001", "81000002", "81000003"):
+        cx.execute("INSERT INTO movimientos(empresa_id,fecha,tag,patente,concepto,monto,verificado,archivo) VALUES(1,'01/10/2026',?,'',"
+                   "'PEAJE X',100,0,'F.pdf')", (tag,))
+    cx.commit()
+    def mov(tag):
+        return cx.execute("SELECT dueno,equipo,verificado FROM movimientos WHERE empresa_id=1 AND tag=?", (tag,)).fetchone()
+    # alta: el movimiento ya cargado se asigna solo y sale de /sin-match
+    post(c, "/flota/agregar", {"tag": "81000001", "patente": "AA111BB", "dueno": "JUAN", "equipo": "Camion 1", "volver": "/sin-match"}, "/sin-match")
+    m = mov("81000001"); assert (m[0], m[1], m[2]) == ("JUAN", "Camion 1", 1)
+    assert "81000001" not in c.get("/sin-match").get_data(as_text=True)
+    assert mov("81000002")[2] == 0, "otro TAG sin flota no se toca"
+    # edicion: cambia el responsable y se refleja
+    fid = cx.execute("SELECT id FROM flota WHERE empresa_id=1 AND tag='81000001'").fetchone()[0]
+    post(c, f"/flota/editar/{fid}", {"tag": "81000001", "patente": "AA111BB", "dueno": "PEDRO", "equipo": "Camion 9"}, "/flota")
+    m = mov("81000001"); assert (m[0], m[1], m[2]) == ("PEDRO", "Camion 9", 1)
+    # re-subir la base completa reasigna todo
+    r = post(c, "/flota", {"archivo": (xlsx([["TAG", "PATENTE", "DUENO", "EQUIPO"], ["81000002", "CC222DD", "ANA", "Semi 2"],
+                                            ["81000003", "EE333FF", "LUIS", "Semi 3"]]), "base.xlsx")}, "/flota")
+    for tag, dn, eq in (("81000002", "ANA", "Semi 2"), ("81000003", "LUIS", "Semi 3")):
+        m = mov(tag); assert (m[0], m[1], m[2]) == (dn, eq, 1), (tag, tuple(m))
+    cx.execute("DELETE FROM movimientos WHERE empresa_id=1"); cx.execute("DELETE FROM flota WHERE empresa_id=1"); cx.commit()
 
 if __name__ == "__main__":
     fallos = 0

@@ -1,0 +1,37 @@
+{# Modal Agregar/Editar equipo. Lo usan /flota y /sin-match. 'volver' (opcional): a donde vuelve tras guardar. #}
+<div class="modal" id="modal-equipo">
+  <div class="caja" style="max-width:520px">
+    <div class="cab"><h3 id="eq-titulo">Agregar equipo</h3><button type="button" onclick="cerrarEquipo()" aria-label="Cerrar"><svg class="i"><use href="#i-cerrar"/></svg></button></div>
+    <div class="cuerpo" style="padding-top:20px">
+      <form method="post" id="eq-form" action="/flota/agregar"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        {% if volver %}<input type="hidden" name="volver" value="{{ volver }}">{% endif %}
+        <div class="campo"><label for="eq-tag">Número de TAG</label><input type="text" id="eq-tag" name="tag" maxlength="40" autocomplete="off"></div>
+        <div class="campo"><label for="eq-patente">Patente</label><input type="text" id="eq-patente" name="patente" maxlength="20" autocomplete="off"></div>
+        <div class="campo"><label for="eq-dueno">Responsable</label><input type="text" id="eq-dueno" name="dueno" maxlength="80" autocomplete="off"></div>
+        <div class="campo"><label for="eq-equipo">Equipo</label><input type="text" id="eq-equipo" name="equipo" maxlength="80" autocomplete="off"></div>
+        <div class="campo"><label for="eq-estado">Estado</label><input type="text" id="eq-estado" name="estado" maxlength="40" autocomplete="off" placeholder="ACTIVO"></div>
+        <div class="campo"><label for="eq-marca">Marca</label><input type="text" id="eq-marca" name="marca" maxlength="40" autocomplete="off"></div>
+        <p class="mini">Hace falta al menos el TAG o la patente.</p>
+        <div class="linea" style="display:flex;gap:10px;justify-content:flex-end">
+          <button class="btn gh" type="button" onclick="cerrarEquipo()">Cancelar</button>
+          <button class="btn" type="submit" id="eq-guardar"><svg class="i"><use href="#i-check"/></svg>Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function abrirEquipo(b){
+  var f=document.getElementById('eq-form'), ed=!!b && !!b.dataset.id;
+  document.getElementById('eq-titulo').textContent=ed?'Editar equipo':'Agregar equipo';
+  f.action=ed?'/flota/editar/'+b.dataset.id:'/flota/agregar';
+  ['tag','patente','dueno','equipo','estado','marca'].forEach(function(k){document.getElementById('eq-'+k).value=b?(b.dataset[k]||''):'';});
+  document.getElementById('modal-equipo').classList.add('abierto');
+  document.getElementById(b&&b.dataset.tag&&!ed?'eq-dueno':'eq-tag').focus();
+}
+function cerrarEquipo(){document.getElementById('modal-equipo').classList.remove('abierto');}
+(function(){var m=document.getElementById('modal-equipo');
+  m.addEventListener('click',function(e){if(e.target===m)cerrarEquipo();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')cerrarEquipo();});})();
+</script>

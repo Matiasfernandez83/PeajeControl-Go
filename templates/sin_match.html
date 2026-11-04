@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_vacio.html" import vacio %}
+{% from "_paginado.html" import paginado %}
+{% block cuerpo %}
+<h1>TAGs sin match en la flota</h1>
+<div class="tarjeta">
+  <p class="mini">Estos TAGs aparecen en las facturas cargadas pero <b>no están en tu base de flota</b>, por eso su plata
+  figura "sin asignar". Con <b>Agregar a la flota</b> se abre el alta con el TAG ya cargado: completá responsable y equipo y guardá.
+  Después de agregarlo, el TAG desaparece de esta lista; la plata de las facturas ya cargadas se asigna al instante, sin reimportar.</p>
+  <div class="linea" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+    <h3 style="margin:0">{{ tot.tags }} TAG{{ '' if tot.tags == 1 else 's' }} faltante{{ '' if tot.tags == 1 else 's' }}
+      <span class="mini" style="margin:0">· {{ tot.n }} pasadas · {{ tot.t|pesos }}</span></h3>
+    <a class="btn gh" href="/flota"><svg class="i"><use href="#i-camion"/></svg>Ver la flota</a>
+  </div>
+</div>
+<div class="tarjeta">
+  <div class="tabla-wrap">
+  <table>
+    <tr><th>TAG</th><th>Patente</th><th class="ocultar-mov">Concepto</th><th class="num">Pasadas</th><th class="num">Monto</th><th class="ocultar-mov">Factura(s)</th><th></th></tr>
+    {% for t in tags %}
+    <tr><td class="mono">{{ t.tag }}</td><td class="mono">{{ t.patente or '—' }}</td><td class="ocultar-mov">{{ t.concepto or '—' }}</td>
+      <td class="num">{{ t.n }}</td><td class="num">{{ t.t|pesos }}</td>
+      <td class="ocultar-mov">{% for f in facturas.get(t.tag, [])[:3] %}{% if f.archivo_id %}<a class="origen" href="/archivo/{{ f.archivo_id }}" target="_blank" rel="noopener" title="Ver la factura {{ f.archivo }}"><svg class="i"><use href="#i-archivo"/></svg><span>{{ f.archivo }}</span></a>{% else %}<span class="origen">{{ f.archivo }}</span>{% endif %}{% if not loop.last %} {% endif %}{% endfor %}{% if facturas.get(t.tag, [])|length > 3 %} <span class="mini" style="margin:0">+{{ facturas.get(t.tag, [])|length - 3 }} más</span>{% endif %}</td>
+      <td style="text-align:right;white-space:nowrap"><button class="btn chico" type="button" data-tag="{{ t.tag }}" data-patente="{{ t.patente or '' }}" onclick="abrirEquipo(this)"><svg class="i"><use href="#i-mas"/></svg>Agregar a la flota</button></td></tr>
+    {% else %}<tr><td colspan="7" class="td-vacio">{{ vacio('camion', 'No falta ningún TAG', 'Todos los TAGs de las facturas están en tu flota.') }}</td></tr>{% endfor %}
+  </table>
+  </div>
+  {{ paginado(pagina, paginas) }}
+</div>
+{% with volver='/sin-match' %}{% include "_modal_equipo.html" %}{% endwith %}
+{% endblock %}
