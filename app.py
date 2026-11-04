@@ -108,7 +108,11 @@ if USE_PG:
                 self._bad = True; raise
         def executemany(self, sql, seq):
             try:
-                cur = self._conn.cursor(); cur.executemany(sql.replace("?", "%s"), list(seq)); cur.close()
+                # execute_batch manda las filas en bloques (1 viaje por bloque, no 1 por fila): con la
+                # base remota, executemany tardaba >120s con ~800 filas y gunicorn mataba el worker.
+                cur = self._conn.cursor()
+                psycopg2.extras.execute_batch(cur, sql.replace("?", "%s"), list(seq), page_size=500)
+                cur.close()
             except (psycopg2.OperationalError, psycopg2.InterfaceError):
                 self._bad = True; raise
         def executescript(self, sql):
