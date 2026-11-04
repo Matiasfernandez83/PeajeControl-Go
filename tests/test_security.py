@@ -442,6 +442,23 @@ def test_migracion_agrega_columnas_faltantes_postgres():
         admin.cursor().execute(f"DROP DATABASE IF EXISTS {nombre}")
         admin.close()
 
+def test_porcentaje_literal_en_sql():
+    # Trampa latente: un % escrito a mano en el SQL (LIKE '%x%') funciona en SQLite pero en PostgreSQL
+    # (psycopg2) reventaba con IndexError. PGConn ahora lo blinda; vale para execute y executemany.
+    d = A._conectar()
+    try:
+        d.execute("DELETE FROM gastos WHERE concepto LIKE 'ZZPCT%'")
+        d.executemany("INSERT INTO gastos(concepto) VALUES(?)", [("ZZPCT 100% ok",), ("ZZPCT otro",)])
+        n = d.execute("SELECT COUNT(*) n FROM gastos WHERE concepto LIKE '%ZZPCT%'").fetchone()["n"]
+        assert n == 2, n
+        n = d.execute("SELECT COUNT(*) n FROM gastos WHERE concepto LIKE '%ZZPCT%' AND concepto LIKE ?", ("%100%%",)).fetchone()["n"]
+        assert n == 1, n   # % literal escrito a mano + parametro ? en la misma query
+        d.executemany("UPDATE gastos SET concepto = concepto || ' 5%' WHERE concepto LIKE 'ZZPCT%' AND id > ?", [(0,)])
+        assert d.execute("SELECT COUNT(*) n FROM gastos WHERE concepto LIKE '%5%'").fetchone()["n"] == 2
+    finally:
+        d.rollback()
+        d.close()
+
 def test_flota_carga_masiva_en_bloques_postgres():
     # Bug de produccion #2: executemany hacia 1 viaje por fila -> timeout del worker en POST /flota.
     # Con la base local no se nota la demora, asi que se cuenta: las filas deben viajar en bloques.
