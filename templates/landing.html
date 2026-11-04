@@ -5,9 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect width='48' height='48' rx='11' fill='%23E30613'/><rect x='6' y='23' width='19' height='11' rx='2' fill='white'/><path d='M25 25h6l5 5v4H25z' fill='white'/><rect x='24' y='14' width='2' height='11' fill='white'/><circle cx='14' cy='35.5' r='3' fill='%23111'/><circle cx='31' cy='35.5' r='3' fill='%23111'/></svg>">
 <title>PeajeControl Go · Control de peajes y gastos de flota</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/fuentes.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
 </head>
 <body>
@@ -151,9 +149,9 @@
   <section class="cta" id="contacto">
     <h2>Pedí una demo y ordená los peajes de tu flota.</h2>
     <div class="datos">
-      <a class="dato" href="#contacto"><svg class="i" aria-hidden="true"><use href="#ic-mail"/></svg> tuemail@peajecontrol.com</a>
-      <a class="dato" href="#contacto"><svg class="i" aria-hidden="true"><use href="#ic-phone"/></svg> +54 9 11 0000-0000</a>
-      <a class="btn btn-blanco" href="#contacto">Solicitar demo</a>
+      <a class="dato" href="{{ contacto.mailto }}"><svg class="i" aria-hidden="true"><use href="#ic-mail"/></svg> {{ contacto.email }}</a>
+      <a class="dato" href="{{ contacto.whatsapp_url }}" target="_blank" rel="noopener"><svg class="i" aria-hidden="true"><use href="#ic-phone"/></svg> {{ contacto.whatsapp }}</a>
+      <a class="btn btn-blanco" href="{{ contacto.mailto }}">Solicitar demo</a>
     </div>
   </section>
 

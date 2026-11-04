@@ -12,3 +12,8 @@ services:
       # archivo. Se carga a mano en el panel de Render (Environment > DATABASE_URL).
       - key: DATABASE_URL
         sync: false
+      # Datos de contacto de la landing (publicos). Si no se cargan, la landing muestra datos de ejemplo.
+      - key: CONTACTO_EMAIL
+        sync: false
+      - key: CONTACTO_WHATSAPP   # con codigo de pais, ej. +54 9 11 1234-5678
+        sync: false
