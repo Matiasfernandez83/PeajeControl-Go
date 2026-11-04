@@ -693,28 +693,6 @@ def filtro_detalle(tipo, arg):
         return "Monto total", "1=1", [], "m.monto DESC, m.id", "/"
     return "Operaciones", "1=1", [], "m.id DESC", "/"
 
-# --- Endpoint JSON para modales de doble-click (drill-down) ---
-@app.route("/detalle/<tipo>")
-def detalle(tipo):
-    d = db(); E = emp()
-    arg = request.args.get("v", "")
-    pagina_url = f"/ver/{tipo}" + (f"?v={quote(arg)}" if arg else "")
-    if tipo == "camiones":
-        rows = d.execute(SEL_MOV + """ WHERE m.empresa_id=? AND m.id IN (
-            SELECT MAX(id) FROM movimientos WHERE patente<>'' AND empresa_id=? GROUP BY patente)
-            ORDER BY m.monto DESC""", (E, E)).fetchall()
-        titulo = "Camiones activos"
-    elif tipo == "duenos":
-        rows = d.execute("""SELECT dueno, COUNT(*) n, SUM(monto) monto,
-            COUNT(DISTINCT patente) patentes FROM movimientos WHERE dueno!='' AND empresa_id=?
-            GROUP BY dueno ORDER BY monto DESC""", (E,)).fetchall()
-        return jsonify(titulo="Responsables", modo="grupo", pagina=pagina_url,
-                       filas=[dict(r) for r in rows])
-    else:
-        titulo, cond, args, orden, _ = filtro_detalle(tipo, arg)
-        rows = d.execute(SEL_MOV + f" WHERE m.empresa_id=? AND {cond} ORDER BY {orden} LIMIT 1000", [E] + args).fetchall()
-    return jsonify(titulo=titulo, modo="detalle", pagina=pagina_url, filas=[dict(r) for r in rows])
-
 # --- Paginas de detalle standalone (abribles en otra pestaña, con paginado y filtros por URL) ---
 # /ver/<tipo>?v=<valor>&q=<busqueda>&p=<pagina>
 # tipos: monto, operaciones, verificados, sinmatch (listas) | camiones, duenos (agrupados)

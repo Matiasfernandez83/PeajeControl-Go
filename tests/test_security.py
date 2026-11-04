@@ -44,7 +44,7 @@ def _skip(motivo):
 def test_rutas_exigen_login():
     c = cliente()
     for ruta in ["/", "/movimientos", "/importar", "/flota", "/gastos", "/reportes", "/config",
-                 "/empresas", "/exportar", "/gastos/exportar", "/detalle/monto", "/ver/monto", "/archivo/1", "/factura/x.pdf"]:
+                 "/empresas", "/exportar", "/gastos/exportar", "/ver/monto", "/archivo/1", "/factura/x.pdf"]:
         r = c.get(ruta)
         assert r.status_code == 302 and "/login" in r.headers["Location"], f"{ruta} sin login: {r.status_code}"
 
@@ -119,12 +119,18 @@ def test_login_exitoso_limpia_y_rota_sesion():
     assert not A.INTENTOS.get("e:" + EMAIL), "el contador debe limpiarse"
     assert app.config["PERMANENT_SESSION_LIFETIME"].total_seconds() == 8 * 3600
 
+def test_detalle_json_eliminado():
+    # el viejo endpoint JSON /detalle/<tipo> (codigo muerto) ya no existe; el tablero usa /ver/<tipo>
+    c = logueado()
+    for tipo in ("monto", "dueno", "duenos", "camiones", "factura"):
+        assert c.get(f"/detalle/{tipo}").status_code == 404, tipo
+
 def test_no_sqli():
     c = logueado()
     for q in ["'", "' OR 1=1 --", "\"; DROP TABLE movimientos; --"]:
         assert c.get("/movimientos", query_string={"q": q}).status_code == 200
         assert c.get("/movimientos", query_string={"dueno": q}).status_code == 200
-        assert c.get("/detalle/dueno", query_string={"v": q}).status_code == 200
+        assert c.get("/ver/dueno", query_string={"v": q}).status_code == 200
     assert c.get("/movimientos").status_code == 200  # la tabla sigue viva
 
 def test_secret_key_sin_fallback():
@@ -160,9 +166,9 @@ def test_flujo_completo_y_export_sin_formulas():
     assert r.status_code == 302
     # tablero y detalle
     assert "Peaje" in c.get("/").get_data(as_text=True) or c.get("/").status_code == 200
-    j = c.get("/detalle/monto").get_json()
-    assert len(j["filas"]) == 3
-    assert c.get("/detalle/duenos").status_code == 200
+    h = c.get("/ver/monto").get_data(as_text=True)
+    assert re.search(r'class="dato">3</span>', h), "el detalle de monto debe listar los 3 movimientos"
+    assert c.get("/ver/duenos").status_code == 200
     assert c.get("/movimientos?vista=vehiculo").status_code == 200
     assert c.get("/movimientos?vista=responsable").status_code == 200
     assert c.get("/movimientos?filtro=sinmatch").status_code == 200
@@ -195,7 +201,7 @@ def test_flujo_completo_y_export_sin_formulas():
     post(c, "/empresas/crear", {"empresa": "Otra SA", "email": "otra@test.com", "clave": "otraotra", "nombre": "Dueño"}, "/empresas")
     assert "Otra SA" in c.get("/empresas").get_data(as_text=True)
     c2 = cliente(); assert login(c2, "otra@test.com", "otraotra").status_code == 302
-    assert c2.get("/detalle/monto").get_json()["filas"] == [], "la otra empresa no debe ver datos ajenos"
+    assert re.search(r'class="dato">0</span>', c2.get("/ver/monto").get_data(as_text=True)), "la otra empresa no debe ver datos ajenos"
     assert c2.get("/reportes/descargar/peajes.xlsx").status_code == 302
     assert c2.get("/empresas").status_code == 302  # no es superadmin
     eid = A._conectar().execute("SELECT id FROM empresas WHERE nombre='Otra SA'").fetchone()["id"]
@@ -203,7 +209,7 @@ def test_flujo_completo_y_export_sin_formulas():
     assert "Otra SA" not in c.get("/empresas").get_data(as_text=True)
     # borrar movimientos y reportes
     post(c, "/reportes/borrar", {"nombres": "peajes.xlsx"}, "/reportes")
-    assert c.get("/detalle/monto").get_json()["filas"] == []
+    assert re.search(r'class="dato">0</span>', c.get("/ver/monto").get_data(as_text=True))
     # salir
     assert c.get("/salir").status_code == 302
     assert c.get("/").status_code == 302
@@ -383,9 +389,6 @@ def test_trazabilidad_factura_pdf_y_detalle_paginado():
     h2 = c2.get("/ver/factura?v=FC-TRAZA.pdf").get_data(as_text=True)
     assert "Sin resultados" in h2 and "/archivo/" not in h2
     # cada movimiento expone su factura de origen (id del archivo)
-    j = c.get("/detalle/factura?v=FC-TRAZA.pdf").get_json()
-    assert len(j["filas"]) == 120 and all(f["archivo"] == "FC-TRAZA.pdf" and f["archivo_id"] == aid for f in j["filas"])
-    assert j["pagina"].startswith("/ver/factura")
     # pagina standalone paginada, con link a la factura y filtros conservados
     h1 = c.get("/ver/factura?v=FC-TRAZA.pdf").get_data(as_text=True)
     assert f"/archivo/{aid}" in h1 and "Página 1 de 3" in h1 and "p=2" in h1
