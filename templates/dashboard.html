@@ -3,28 +3,28 @@
 {% from "_paginado.html" import origen %}
 {% block cuerpo %}
 <h1>Dashboard</h1>
-<p class="sub">Hacé doble click en una tarjeta para abrir el detalle completo en otra pestaña.</p>
+<p class="sub">Tocá «Abrir» en una tarjeta (o doble click en la compu) para ver el detalle completo en otra pestaña.</p>
 
 <div class="kpis">
-  <div class="kpi" ondblclick="abrirPestana('monto')" title="Doble click: abrir en otra pestaña">
+  <div class="kpi" ondblclick="abrirPestana('monto')" title="Doble click o botón Abrir: detalle en otra pestaña">
     <div class="top"><div class="l">Monto total</div><div class="ic-box ac-verde"><svg class="i"><use href="#i-plata"/></svg></div></div>
     <div class="v">{{ kpi.total|pesos }}</div>
-    <div class="s">Total facturado</div>
+    <div class="pie"><div class="s">Total facturado</div><a class="abrir" href="/ver/monto" target="_blank" rel="noopener" ondblclick="event.stopPropagation()" aria-label="Abrir detalle en otra pestaña">Abrir<svg class="i"><use href="#i-externo"/></svg></a></div>
   </div>
-  <div class="kpi" ondblclick="abrirPestana('camiones')" title="Doble click: abrir en otra pestaña">
+  <div class="kpi" ondblclick="abrirPestana('camiones')" title="Doble click o botón Abrir: detalle en otra pestaña">
     <div class="top"><div class="l">Camiones activos</div><div class="ic-box ac-azul"><svg class="i"><use href="#i-camion"/></svg></div></div>
     <div class="v">{{ kpi.patentes }}</div>
-    <div class="s">Patentes únicas detectadas</div>
+    <div class="pie"><div class="s">Patentes únicas detectadas</div><a class="abrir" href="/ver/camiones" target="_blank" rel="noopener" ondblclick="event.stopPropagation()" aria-label="Abrir detalle en otra pestaña">Abrir<svg class="i"><use href="#i-externo"/></svg></a></div>
   </div>
-  <div class="kpi" ondblclick="abrirPestana('duenos')" title="Doble click: abrir en otra pestaña">
+  <div class="kpi" ondblclick="abrirPestana('duenos')" title="Doble click o botón Abrir: detalle en otra pestaña">
     <div class="top"><div class="l">Responsables</div><div class="ic-box ac-violeta"><svg class="i"><use href="#i-usuarios"/></svg></div></div>
     <div class="v">{{ kpi.duenos }}</div>
-    <div class="s">Proveedores distintos</div>
+    <div class="pie"><div class="s">Proveedores distintos</div><a class="abrir" href="/ver/duenos" target="_blank" rel="noopener" ondblclick="event.stopPropagation()" aria-label="Abrir detalle en otra pestaña">Abrir<svg class="i"><use href="#i-externo"/></svg></a></div>
   </div>
-  <div class="kpi" ondblclick="abrirPestana('operaciones')" title="Doble click: abrir en otra pestaña">
+  <div class="kpi" ondblclick="abrirPestana('operaciones')" title="Doble click o botón Abrir: detalle en otra pestaña">
     <div class="top"><div class="l">Operaciones</div><div class="ic-box ac-naranja"><svg class="i"><use href="#i-rayo"/></svg></div></div>
     <div class="v">{{ kpi.n }}</div>
-    <div class="s">Registros procesados</div>
+    <div class="pie"><div class="s">Registros procesados</div><a class="abrir" href="/ver/operaciones" target="_blank" rel="noopener" ondblclick="event.stopPropagation()" aria-label="Abrir detalle en otra pestaña">Abrir<svg class="i"><use href="#i-externo"/></svg></a></div>
   </div>
 </div>
 

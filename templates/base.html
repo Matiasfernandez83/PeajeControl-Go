@@ -166,6 +166,11 @@ tr[data-abrir]{cursor:pointer}
 .kpi .l,.etiqueta{font-size:11px;color:var(--gris);text-transform:uppercase;letter-spacing:.04em;font-weight:600}
 .kpi .v{font-size:28px;font-weight:700;letter-spacing:-.02em;line-height:1.2;margin:12px 0 2px;font-variant-numeric:tabular-nums}
 .kpi .s{font-size:12px;color:var(--tenue)}
+.kpi .pie{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.kpi a.abrir{display:inline-flex;align-items:center;gap:4px;min-height:32px;padding:0 10px;margin-left:auto;border:1px solid var(--borde);border-radius:999px;font-size:12px;font-weight:600;color:var(--gris);text-decoration:none;white-space:nowrap;user-select:none}
+.kpi a.abrir .i{width:13px;height:13px}
+.kpi a.abrir:hover,.kpi a.abrir:focus-visible{color:var(--rojo);border-color:var(--rojo);outline:0}
+@media(hover:none){.kpi a.abrir{min-height:40px;padding:0 14px}}
 
 .dos{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px}
 .dos.asim{grid-template-columns:2fr 1fr}
@@ -405,6 +410,7 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
   <symbol id="i-papelera" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></symbol>
   <symbol id="i-calendario" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></symbol>
   <symbol id="i-candado" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-externo" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
   <symbol id="i-mas" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
   <symbol id="i-ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
