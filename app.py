@@ -976,7 +976,30 @@ def flota_agregar():
         d.execute("INSERT INTO flota(empresa_id,tag,patente,dueno,equipo,estado,marca) VALUES(?,?,?,?,?,?,?)",
                   (emp(), tag, pat, dueno, equipo, estado, marca))
         d.commit(); flash("Equipo agregado.")
-    return redirect("/flota")
+    return redirect("/sin-match" if request.form.get("volver") == "/sin-match" else "/flota")
+
+# --- TAGs que aparecen en los movimientos pero NO estan en la flota de la empresa ---
+SIN_MATCH_FROM = ("FROM movimientos WHERE empresa_id=? AND tag IS NOT NULL AND tag<>'' AND tag NOT IN "
+                  "(SELECT tag FROM flota WHERE empresa_id=? AND tag IS NOT NULL AND tag<>'')")
+
+@app.route("/sin-match")
+def sin_match():
+    d = db(); E = emp(); a = (E, E)
+    tot = d.execute("SELECT COUNT(DISTINCT tag) tags, COUNT(*) n, COALESCE(SUM(monto),0) t " + SIN_MATCH_FROM, a).fetchone()
+    pagina, paginas, off = paginar(tot["tags"])
+    tags = d.execute("SELECT tag, COUNT(*) n, COALESCE(SUM(monto),0) t, MAX(NULLIF(patente,'')) patente, "
+                     "MAX(NULLIF(concepto,'')) concepto " + SIN_MATCH_FROM +
+                     " GROUP BY tag ORDER BY t DESC, tag LIMIT ? OFFSET ?", a + (MOV_POR_PAGINA, off)).fetchall()
+    facturas = {}
+    if tags:
+        ph = ",".join("?" * len(tags))
+        for r in d.execute("SELECT DISTINCT m.tag, m.archivo, a.id archivo_id FROM movimientos m LEFT JOIN archivos a "
+                           "ON a.empresa_id=m.empresa_id AND a.nombre=m.archivo "
+                           f"WHERE m.empresa_id=? AND m.tag IN ({ph}) AND m.archivo IS NOT NULL ORDER BY m.archivo",
+                           [E] + [t["tag"] for t in tags]).fetchall():
+            facturas.setdefault(r["tag"], []).append(r)
+    return render_template("sin_match.html", tags=tags, facturas=facturas, tot=tot,
+                           pagina=pagina, paginas=paginas, por_pagina=MOV_POR_PAGINA)
 
 @app.route("/flota/editar/<int:fid>", methods=["POST"])
 def flota_editar(fid):

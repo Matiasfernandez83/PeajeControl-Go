@@ -51,6 +51,9 @@
       <span class="valor">{{ r.n }} · {{ r.t|pesos }}</span>
     </a>
     {% else %}{{ vacio('bandeja', 'Sin datos') }}{% endfor %}
+    {% if dist|selectattr('k', 'equalto', 'Sin match de TAG')|list %}
+    <a class="btn chico gh" href="/sin-match" style="margin-top:12px"><svg class="i"><use href="#i-alerta"/></svg>Ver TAGs que faltan en la flota</a>
+    {% endif %}
   </div>
 </div>
 
