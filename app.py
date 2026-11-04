@@ -195,11 +195,51 @@ def _fix_archivos_unique(con):
                 con.execute("ALTER TABLE archivos_new RENAME TO archivos")
                 break
 
+# Columnas esperadas por tabla (sin id/empresa_id/email). CREATE TABLE IF NOT EXISTS no agrega
+# columnas a tablas ya existentes, asi que las bases viejas se completan con _agregar_columnas.
+# Todas NULLables (con DEFAULT cuando corresponde) para no romper filas existentes.
+def _columnas_esperadas():
+    real = "DOUBLE PRECISION" if USE_PG else "REAL"
+    return {
+        "usuarios": [("clave", "TEXT"), ("nombre", "TEXT"), ("rol", "TEXT DEFAULT 'operador'")],
+        "flota": [("tag", "TEXT"), ("patente", "TEXT"), ("dueno", "TEXT"), ("equipo", "TEXT"),
+                  ("estado", "TEXT"), ("marca", "TEXT")],
+        "movimientos": [("fecha", "TEXT"), ("tag", "TEXT"), ("patente", "TEXT"), ("concepto", "TEXT"),
+                        ("monto", real), ("dueno", "TEXT"), ("equipo", "TEXT"),
+                        ("verificado", "INTEGER DEFAULT 0"), ("archivo", "TEXT"), ("creado", "TEXT")],
+        "archivos": [("nombre", "TEXT"), ("tipo", "TEXT"), ("total_doc", real + " DEFAULT 0"),
+                     ("contenido", "TEXT"), ("mime", "TEXT"), ("creado", "TEXT")],
+        "resumenes": [("archivo", "TEXT"), ("banco", "TEXT"), ("titular", "TEXT"), ("periodo", "TEXT"),
+                      ("vencimiento", "TEXT"), ("total_resumen", real), ("creado", "TEXT")],
+        "gastos": [("resumen_id", "INTEGER"), ("fecha", "TEXT"), ("concepto", "TEXT"),
+                   ("categoria", "TEXT"), ("monto", real)],
+    }
+
+def _agregar_columnas(con):
+    # Idempotente: solo agrega lo que falta. Un fallo no corta el arranque.
+    for tabla, cols in _columnas_esperadas().items():
+        try:
+            existentes = _columnas(con, tabla)
+        except Exception as e:
+            print(f"migrar: no se pudo leer columnas de {tabla}: {e}"); continue
+        for col, tipo in cols:
+            if col in existentes:
+                continue
+            try:
+                con.execute(f"ALTER TABLE {tabla} ADD COLUMN {col} {tipo}")
+                con.commit()
+                print(f"migrar: agregada columna {tabla}.{col}")
+            except Exception as e:
+                try: con.rollback()
+                except Exception: pass
+                print(f"migrar: no se pudo agregar {tabla}.{col}: {e}")
+
 def migrar(con):
     # Actualiza bases creadas antes de multi-empresa sin perder datos.
     for tabla in TABLAS_TENANT:
         if "empresa_id" not in _columnas(con, tabla):
             con.execute(f"ALTER TABLE {tabla} ADD COLUMN empresa_id INTEGER")
+    _agregar_columnas(con)
     _fix_archivos_unique(con)
     # Indices por empresa (se crean recien aca, ya con la columna presente).
     con.execute("CREATE INDEX IF NOT EXISTS idx_mov_emp ON movimientos(empresa_id)")
