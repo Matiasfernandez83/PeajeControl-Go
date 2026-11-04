@@ -3,146 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>body{margin:0;background:#f4f4f5}@media(prefers-color-scheme:dark){body{background:#0d1119}}</style>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect width='48' height='48' rx='11' fill='%23E30613'/><rect x='6' y='23' width='19' height='11' rx='2' fill='white'/><path d='M25 25h6l5 5v4H25z' fill='white'/><rect x='24' y='14' width='2' height='11' fill='white'/><circle cx='14' cy='35.5' r='3' fill='%23111'/><circle cx='31' cy='35.5' r='3' fill='%23111'/></svg>">
 <title>PeajeControl Go · Control de peajes y gastos de flota</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-:root{
-  --rojo:#E30613; --lima:#DFFF00; --azul:#3b82f6; --verde:#16a34a;
-  --negro:#141414; --fondo:#f4f4f5; --panel:#ffffff; --borde:#e4e4e7; --gris:#64748b; --tinta:#141414;
-  --radio:12px; --radio-ch:8px;
-  --sombra:0 1px 2px rgba(20,20,20,.04),0 8px 24px -12px rgba(20,20,20,.14);
-  --sombra-h:0 1px 2px rgba(20,20,20,.04),0 12px 28px -12px rgba(20,20,20,.22);
-  --oscuro:#0d1119; --txt:#e8edf5; --txt2:#9aa6b8; --linea:rgba(255,255,255,.1);
-}
-@media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]){--fondo:#0d1119;--panel:#161c27;--borde:#252d3b;--gris:#9aa6b8;--tinta:#e8edf5;--negro:#f4f4f5;
-    --sombra:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.6);--sombra-h:0 12px 28px -12px rgba(0,0,0,.7)}
-}
-:root[data-theme="dark"]{--fondo:#0d1119;--panel:#161c27;--borde:#252d3b;--gris:#9aa6b8;--tinta:#e8edf5;--negro:#f4f4f5;
-  --sombra:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.6);--sombra-h:0 12px 28px -12px rgba(0,0,0,.7)}
-*{margin:0;padding:0;box-sizing:border-box}
-html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
-@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
-body{font-family:'Inter',system-ui,sans-serif;font-feature-settings:'tnum';font-weight:400;font-size:15px;line-height:1.55;
-  background:var(--fondo);color:var(--tinta);-webkit-font-smoothing:antialiased;overflow-x:hidden}
-.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
-.ic-box{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  color:var(--ac,var(--azul));background:color-mix(in srgb,var(--ac,var(--azul)) 12%,transparent)}
-.ic-box .i{width:20px;height:20px}
-.ac-rojo{--ac:#E30613}.ac-azul{--ac:#3b82f6}.ac-verde{--ac:#16a34a}
-.wrap{max-width:1080px;margin:0 auto;padding:0 max(20px,env(safe-area-inset-left,0px))}
-
-/* Marca: se conserva tal cual */
-.wm{display:flex;align-items:center;gap:10px}
-.wm-ico{width:44px;height:44px;flex-shrink:0}
-.wm-stack{display:flex;flex-direction:column;line-height:.86;font-weight:800;color:#fff;letter-spacing:.4px;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif}
-.wm-stack div{font-size:19px}
-.wm-go{font-family:Georgia,'Times New Roman',serif;font-size:30px;font-weight:900;font-style:italic;color:var(--rojo);letter-spacing:-1px;line-height:.9}
-.wm-go b{font-size:21px;vertical-align:top;font-style:normal}
-
-/* Botones */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:46px;padding:0 22px;border-radius:var(--radio-ch);
-  font-family:inherit;font-weight:600;font-size:14.5px;text-decoration:none;cursor:pointer;border:1px solid transparent;
-  transition:background .15s,box-shadow .15s,transform .15s,border-color .15s}
-.btn:focus-visible{outline:0;box-shadow:0 0 0 3px rgba(59,130,246,.45)}
-.btn-rojo{background:var(--rojo);color:#fff;box-shadow:0 10px 30px -8px rgba(227,6,19,.55),inset 0 1px 0 rgba(255,255,255,.18)}
-.btn-rojo:hover{background:#c00511}
-.btn-vidrio{background:rgba(255,255,255,.06);color:#fff;border-color:var(--linea)}
-.btn-vidrio:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.25)}
-.btn-sm{height:38px;padding:0 16px;font-size:13.5px}
-.btn-blanco{background:#fff;color:var(--rojo)}
-.btn-blanco:hover{background:#f4f4f5}
-.btn .i{width:16px;height:16px}
-
-/* Hero */
-.hero{position:relative;overflow:hidden;color:var(--txt);isolation:isolate;
-  background:radial-gradient(1100px 760px at 82% 10%,#1c2636 0%,transparent 60%),
-  radial-gradient(900px 700px at 12% 95%,#141b29 0%,transparent 55%),linear-gradient(135deg,#0a0d12,#0d1119 60%,#0a0e15)}
-#net{position:absolute;inset:0;width:100%;height:100%;z-index:-2;display:block}
-.hero::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
-  background:linear-gradient(90deg,rgba(10,13,18,.7) 0%,rgba(10,13,18,.4) 55%,rgba(10,13,18,0) 100%)}
-.nav{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 0}
-.hero-cuerpo{padding:clamp(48px,9vw,110px) 0 clamp(56px,9vw,120px);display:flex;flex-direction:column;gap:20px;align-items:flex-start}
-.eyebrow{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.06);border:1px solid var(--linea);
-  color:var(--txt);font-weight:500;font-size:12.5px;padding:6px 12px;border-radius:100px}
-.eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--lima)}
-.hero h1{font-size:clamp(30px,5.4vw,52px);line-height:1.1;font-weight:700;letter-spacing:-.025em;color:#fff;max-width:20ch;text-wrap:balance}
-.hero h1 em{font-style:normal;color:var(--rojo)}
-.hero .bajada{font-size:clamp(15.5px,2vw,18px);color:#c3ccda;max-width:62ch}
-.hero .acciones{display:flex;gap:12px;flex-wrap:wrap;margin-top:6px}
-.hero .producto{display:flex;gap:10px;align-items:center;color:var(--txt2);font-size:13px;margin-top:6px}
-.hero .producto b{color:#fff;font-weight:600}
-
-/* Secciones */
-section.bloque{padding:clamp(40px,6vw,72px) 0}
-.rotulo{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--rojo);margin-bottom:8px}
-h2.titulo{font-size:clamp(22px,3.2vw,30px);font-weight:700;letter-spacing:-.02em;line-height:1.2;margin-bottom:28px;text-wrap:balance}
-.tarjeta{background:var(--panel);border:1px solid var(--borde);border-radius:var(--radio);box-shadow:var(--sombra);padding:24px;
-  transition:box-shadow .15s,transform .15s}
-.tarjeta:hover{transform:translateY(-1px);box-shadow:var(--sombra-h)}
-.tarjeta h3{font-size:15px;font-weight:600;margin:16px 0 6px}
-.tarjeta p{font-size:13.5px;color:var(--gris)}
-.grilla{display:grid;gap:16px}
-.g3{grid-template-columns:repeat(3,1fr)}
-
-.paso .n{font-size:12px;font-weight:600;color:var(--gris);margin-top:16px;font-variant-numeric:tabular-nums}
-.paso h3{margin-top:4px}
-
-/* Franja oscura de beneficios */
-.franja{background:var(--oscuro);color:var(--txt);border-radius:var(--radio);padding:clamp(24px,4vw,40px);
-  display:grid;grid-template-columns:repeat(3,1fr);gap:28px;border:1px solid #1d2535}
-.franja .big{font-size:clamp(20px,2.6vw,26px);font-weight:700;letter-spacing:-.02em;line-height:1.2;color:#fff}
-.franja .big u{text-decoration:none;color:var(--lima)}
-.franja p{margin-top:8px;font-size:13.5px;color:var(--txt2)}
-.franja .i{width:22px;height:22px;color:var(--rojo);margin-bottom:12px}
-
-/* Features */
-.feats{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
-.feat{display:flex;gap:14px;align-items:flex-start;background:var(--panel);border:1px solid var(--borde);
-  border-radius:var(--radio);padding:16px 18px;box-shadow:var(--sombra)}
-.feat p{font-size:13.5px;color:var(--gris);padding-top:2px}
-.feat b{color:var(--tinta);font-weight:600}
-
-/* Planes */
-.plan{display:flex;flex-direction:column;gap:6px;position:relative}
-.plan.destacado{border-color:var(--rojo);box-shadow:0 0 0 1px var(--rojo),var(--sombra)}
-.plan .et{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--gris)}
-.plan .flota{font-size:21px;font-weight:700;letter-spacing:-.02em}
-.plan .badge{align-self:flex-start;background:var(--rojo);color:#fff;font-size:11px;font-weight:600;padding:3px 10px;border-radius:100px;margin-bottom:4px}
-.plan p{font-size:13.5px;color:var(--gris)}
-
-/* CTA final */
-.cta{background:var(--rojo);border-radius:var(--radio);padding:clamp(26px,4vw,40px);color:#fff;
-  display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;
-  box-shadow:0 20px 50px -20px rgba(227,6,19,.55)}
-.cta h2{font-size:clamp(21px,3vw,28px);font-weight:700;letter-spacing:-.02em;line-height:1.2;max-width:20ch;text-wrap:balance}
-.cta .datos{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
-.cta .datos a.dato{color:#fff;text-decoration:none;display:inline-flex;align-items:center;gap:10px;font-weight:500;font-size:14px}
-.cta .datos a.dato:hover{text-decoration:underline}
-.cta .datos .btn{margin-top:6px}
-
-footer.pie{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;
-  color:var(--gris);font-size:12.5px;border-top:1px solid var(--borde);padding:22px 0 32px;margin-top:clamp(36px,5vw,56px)}
-.sinia{display:inline-flex;align-items:center;gap:6px;font-weight:600;color:var(--verde)}
-.sinia .i{width:16px;height:16px}
-
-@media(max-width:860px){
-  .g3,.franja{grid-template-columns:1fr}
-  .feats{grid-template-columns:1fr}
-  .hero::after{background:linear-gradient(180deg,rgba(10,13,18,.7),rgba(10,13,18,.55))}
-}
-@media(max-width:520px){
-  .wm-ico{width:38px;height:38px}.wm-stack div{font-size:16px}.wm-go{font-size:25px}.wm-go b{font-size:17px}
-  .hero .acciones .btn{flex:1 1 100%}
-  .cta .datos,.cta .datos .btn{width:100%}
-  .tarjeta{padding:20px}
-}
-@media print{ #net{display:none}}
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
@@ -235,7 +101,7 @@ footer.pie{display:flex;justify-content:space-between;align-items:center;flex-wr
     </div>
   </section>
 
-  <section class="bloque" style="padding-top:0">
+  <section class="bloque pegado">
     <div class="rotulo">Cómo funciona</div>
     <h2 class="titulo">En 3 pasos</h2>
     <div class="grilla g3">
@@ -269,7 +135,7 @@ footer.pie{display:flex;justify-content:space-between;align-items:center;flex-wr
     </div>
   </section>
 
-  <section class="bloque" style="padding-top:0">
+  <section class="bloque pegado">
     <div class="rotulo">Planes</div>
     <h2 class="titulo">Según el tamaño de tu flota</h2>
     <div class="grilla g3">
@@ -299,66 +165,6 @@ footer.pie{display:flex;justify-content:space-between;align-items:center;flex-wr
 </div>
 </main>
 
-<script>
-(function(){
-  const hero=document.getElementById('hero'), cv=document.getElementById('net'), ctx=cv.getContext('2d');
-  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
-  const COL={base:[150,170,200],rojo:[227,6,19],lima:[223,255,0],azul:[59,130,246]};
-  const mouse={x:-999,y:-999,on:false};
-  let W,H,DPR,nodes=[],trail=[],raf=0,visible=true;
-  function rgba(c,a){return 'rgba('+c[0]+','+c[1]+','+c[2]+','+a+')';}
-  function resize(){
-    DPR=Math.min(2,window.devicePixelRatio||1);
-    const w=hero.clientWidth,h=hero.clientHeight;
-    W=cv.width=Math.floor(w*DPR); H=cv.height=Math.floor(h*DPR);
-    const target=Math.min(70,Math.max(26,Math.round(w*h/16000)));
-    nodes=[];
-    for(let i=0;i<target;i++)nodes.push({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.22*DPR,vy:(Math.random()-.5)*.22*DPR});
-    if(reduce)draw();
-  }
-  function draw(){
-    ctx.clearRect(0,0,W,H);
-    const LINK=145*DPR,MR=190*DPR;
-    for(let i=0;i<nodes.length;i++){const a=nodes[i];
-      for(let j=i+1;j<nodes.length;j++){const b=nodes[j],d=Math.hypot(a.x-b.x,a.y-b.y);
-        if(d<LINK){ctx.strokeStyle=rgba(COL.base,(1-d/LINK)*.18);ctx.lineWidth=DPR;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}}}
-    if(mouse.on)for(const n of nodes){const d=Math.hypot(mouse.x-n.x,mouse.y-n.y);
-      if(d<MR){const t=1-d/MR,c=t>.55?COL.rojo:(t>.3?COL.lima:COL.azul);
-        ctx.strokeStyle=rgba(c,t*.5);ctx.lineWidth=1.1*DPR;ctx.beginPath();ctx.moveTo(mouse.x,mouse.y);ctx.lineTo(n.x,n.y);ctx.stroke();}}
-    for(const n of nodes){let near=0;
-      if(mouse.on){const d=Math.hypot(mouse.x-n.x,mouse.y-n.y);near=d<MR?1-d/MR:0;}
-      ctx.fillStyle=near>.5?rgba(COL.rojo,.9):rgba(COL.base,.5+near*.4);
-      ctx.beginPath();ctx.arc(n.x,n.y,(1.5+near*1.6)*DPR,0,7);ctx.fill();}
-    for(let i=1;i<trail.length;i++){const p=trail[i-1],q=trail[i],t=i/trail.length;
-      ctx.strokeStyle=rgba(COL.rojo,t*.5);ctx.lineWidth=(.5+t*3.5)*DPR;ctx.lineCap='round';
-      ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();}
-    if(mouse.on){const g=ctx.createRadialGradient(mouse.x,mouse.y,0,mouse.x,mouse.y,26*DPR);
-      g.addColorStop(0,rgba(COL.lima,.55));g.addColorStop(1,rgba(COL.lima,0));
-      ctx.fillStyle=g;ctx.beginPath();ctx.arc(mouse.x,mouse.y,26*DPR,0,7);ctx.fill();}
-  }
-  function step(){
-    for(const n of nodes){n.x+=n.vx;n.y+=n.vy;
-      if(n.x<0||n.x>W)n.vx*=-1; if(n.y<0||n.y>H)n.vy*=-1;
-      if(mouse.on){const dx=mouse.x-n.x,dy=mouse.y-n.y,d=Math.hypot(dx,dy),MR=190*DPR;
-        if(d<MR&&d>0){const f=(1-d/MR)*.035;n.vx+=dx/d*f;n.vy+=dy/d*f;}}
-      n.vx*=.995;n.vy*=.995;
-      const sp=Math.hypot(n.vx,n.vy),cap=.9*DPR; if(sp>cap){n.vx=n.vx/sp*cap;n.vy=n.vy/sp*cap;}}
-    draw();
-    if(trail.length>22)trail.shift();
-    raf=requestAnimationFrame(step);
-  }
-  function play(){cancelAnimationFrame(raf);if(!reduce&&visible&&!document.hidden)raf=requestAnimationFrame(step);}
-  function setMouse(x,y){const r=cv.getBoundingClientRect();mouse.x=(x-r.left)*DPR;mouse.y=(y-r.top)*DPR;mouse.on=true;trail.push({x:mouse.x,y:mouse.y});}
-  if(!reduce){
-    hero.addEventListener('mousemove',e=>setMouse(e.clientX,e.clientY));
-    hero.addEventListener('mouseleave',()=>{mouse.on=false;trail=[];});
-    hero.addEventListener('touchmove',e=>{const t=e.touches[0];if(t)setMouse(t.clientX,t.clientY);},{passive:true});
-    document.addEventListener('visibilitychange',play);
-    if('IntersectionObserver' in window)new IntersectionObserver(es=>{visible=es[0].isIntersecting;play();}).observe(hero);
-  }
-  let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{resize();play();},150);});
-  resize();play();
-})();
-</script>
+<script src="{{ url_for('static', filename='js/particulas-landing.js') }}" defer></script>
 </body>
 </html>

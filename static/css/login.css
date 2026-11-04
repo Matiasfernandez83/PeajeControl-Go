@@ -1,0 +1,51 @@
+/* PeajeControl Go - estilos de la pantalla de ingreso (templates/login.html). Siempre en modo oscuro. */
+:root{--rojo:#E30613;--lima:#DFFF00;--azul:#3b82f6;--radio-ch:11px;
+  --vidrio:rgba(18,24,34,.55);--linea:rgba(255,255,255,.09);--txt:#e8edf5;--txt2:#9aa6b8;color-scheme:dark}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{font-family:'Inter',system-ui,sans-serif;font-feature-settings:'tnum';-webkit-font-smoothing:antialiased;
+  background:radial-gradient(1100px 760px at 82% 16%,#1c2636 0%,transparent 60%),
+  radial-gradient(900px 700px at 15% 88%,#141b29 0%,transparent 55%),linear-gradient(135deg,#0a0d12,#0d1119 60%,#0a0e15);
+  color:var(--txt);min-height:100vh;display:flex;align-items:center;
+  padding:16px max(16px,env(safe-area-inset-right,0px)) 16px max(7%,env(safe-area-inset-left,0px));overflow:auto}
+#net{position:fixed;inset:0;z-index:0;display:block;pointer-events:none}
+.caja{position:relative;z-index:2;width:100%;max-width:380px;background:var(--vidrio);
+  backdrop-filter:blur(18px) saturate(1.1);-webkit-backdrop-filter:blur(18px) saturate(1.1);
+  border:1px solid var(--linea);border-radius:20px;padding:34px 32px;
+  box-shadow:0 30px 90px -30px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.06)}
+.wm{display:flex;align-items:center;gap:11px;margin-bottom:24px}
+.wm-ico{width:46px;height:46px;flex-shrink:0}
+/* Marca: se conserva tal cual (texto en blanco sobre fondo oscuro) */
+.wm-stack{display:flex;flex-direction:column;line-height:.86;font-weight:800;color:#fff;letter-spacing:.4px;
+  font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif}
+.wm-stack div{font-size:22px}
+.wm-go{font-family:Georgia,'Times New Roman',serif;font-size:34px;font-weight:900;font-style:italic;
+  color:#E30613;letter-spacing:-1px;line-height:.9}
+.wm-go b{font-size:24px;vertical-align:top;font-style:normal}
+h1{font-weight:700;letter-spacing:-.02em;font-size:23px;margin-bottom:4px;color:#fff}
+p{color:var(--txt2);font-size:13px;margin-bottom:22px}
+label{display:block;font-size:12px;font-weight:600;letter-spacing:.03em;color:var(--txt2);margin-bottom:7px}
+input{width:100%;height:44px;padding:0 14px;border:1px solid var(--linea);border-radius:var(--radio-ch);
+  background:rgba(255,255,255,.04);color:var(--txt);font-family:inherit;font-size:14px;margin-bottom:16px;
+  transition:border-color .15s,box-shadow .15s,background .15s}
+input::placeholder{color:#5f6a7d}
+input:focus{outline:0;border-color:var(--azul);box-shadow:0 0 0 3px rgba(59,130,246,.22);background:rgba(255,255,255,.06)}
+input:-webkit-autofill{-webkit-text-fill-color:var(--txt);-webkit-box-shadow:0 0 0 40px #18202e inset}
+button{width:100%;height:46px;background:var(--rojo);color:#fff;border:0;border-radius:var(--radio-ch);
+  font-family:inherit;font-weight:600;font-size:14.5px;cursor:pointer;margin-top:8px;
+  box-shadow:0 10px 30px -8px rgba(227,6,19,.55),inset 0 1px 0 rgba(255,255,255,.18);transition:background .15s}
+button:hover{background:#c00511}
+button:focus-visible{outline:0;box-shadow:0 0 0 3px rgba(227,6,19,.4)}
+.err{background:rgba(227,6,19,.12);color:#ffb4ba;border:1px solid rgba(227,6,19,.35);border-radius:var(--radio-ch);
+  padding:11px 12px;font-size:13px;margin-bottom:16px}
+.clave-wrap{position:relative;width:100%;margin-bottom:16px}
+div.clave-wrap input{padding-right:46px;margin:0}
+button.ojo{position:absolute;top:0;right:0;bottom:0;width:44px;height:auto;padding:0;margin:0;background:transparent;
+  border:0;border-radius:0 var(--radio-ch) var(--radio-ch) 0;color:var(--txt2);cursor:pointer;display:flex;
+  align-items:center;justify-content:center;box-shadow:none}
+button.ojo:hover,button.ojo:focus-visible{background:transparent;color:var(--lima);box-shadow:none;outline:0}
+button.ojo svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+button.ojo .o-cerrado,button.ojo.ver .o-abierto{display:none}
+button.ojo.ver .o-cerrado{display:block}
+@media(max-width:560px){body{justify-content:center;padding-left:max(16px,env(safe-area-inset-left,0px))}
+  .caja{padding:26px 20px}input{font-size:16px}}
