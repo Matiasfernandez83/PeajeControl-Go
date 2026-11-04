@@ -1,11 +1,8 @@
 # Tests del lector de facturas de peaje (un caso por emisor) y utilidades.
 # Corre con: python3 tests/test_lectura_peajes.py   (si existe la carpeta de archivos reales, tambien los valida)
-import glob, os, sys, tempfile
-RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, RAIZ)
-os.environ.pop("DATABASE_URL", None)
-os.environ.update(ADMIN_PASSWORD="clave-de-test-123", SECRET_KEY="secret-de-test",
-                  DB_PATH=os.path.join(tempfile.mkdtemp(), "t.db"))
+import glob, os, sys
+import _entorno   # mismo entorno que test_security (SQLite o PostgreSQL)
+RAIZ = _entorno.RAIZ
 import app as A
 
 def eq(a, b, msg=""):
