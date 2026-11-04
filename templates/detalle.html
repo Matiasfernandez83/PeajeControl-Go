@@ -3,7 +3,10 @@
 {% from "_paginado.html" import paginado, origen %}
 {% block cuerpo %}
 <h1>{{ titulo }}</h1>
-<p class="sub"><a href="{{ volver }}">&larr; Volver</a></p>
+<div class="volver-barra">
+  <a class="btn sec" href="{{ volver }}"><svg class="i"><use href="#i-volver"/></svg>Volver</a>
+  {% if archivo %}<a class="btn" href="/archivo/{{ archivo.id }}" target="_blank" rel="noopener"><svg class="i"><use href="#i-archivo"/></svg>Ver factura (PDF)</a>{% endif %}
+</div>
 
 {% if modo == 'grupo' %}
 <div class="tarjeta">
@@ -11,8 +14,8 @@
   <table>
     <tr><th>{{ 'Vehículo' if tipo=='camiones' else 'Responsable' }}</th><th class="num">Operaciones</th><th class="num">{{ 'Responsable' if tipo=='camiones' else 'Patentes' }}</th><th class="num">Total</th></tr>
     {% for g in grupos %}
-    <tr>
-      <td><a href="/ver/{{ enlace }}?v={{ g.g|urlencode }}" target="_blank" rel="noopener"><b>{{ g.g }}</b></a></td>
+    <tr data-abrir="/ver/{{ enlace }}?v={{ g.g|urlencode }}" title="Doble click para abrir en otra pestaña">
+      <td><a href="/ver/{{ enlace }}?v={{ g.g|urlencode }}" target="_blank" rel="noopener"><b>{{ g.g }}</b></a>{% if g.g == 'S/D' %}<span class="sd-nota">sin patente</span>{% endif %}</td>
       <td class="num">{{ g.n }}</td><td class="num">{{ g.sub }}</td><td class="num">{{ g.t|pesos }}</td>
     </tr>
     {% else %}<tr><td colspan="4" class="td-vacio">{{ vacio('bandeja', 'Sin datos') }}</td></tr>{% endfor %}
@@ -24,7 +27,6 @@
 <div class="tarjeta">
   {% if archivo %}
   <p class="mini">
-    <a class="btn chico sec" href="/archivo/{{ archivo.id }}" target="_blank" rel="noopener">Ver factura</a>
     {{ archivo.tipo }} · subida {{ archivo.creado }}{% if archivo.total_doc %} · total del documento {{ archivo.total_doc|pesos }}{% endif %}
   </p>
   {% endif %}
@@ -41,7 +43,7 @@
   <table>
     <tr><th>Fecha</th><th>Patente</th><th class="ocultar-mov">Equipo</th><th>Responsable</th><th>TAG</th><th>Concepto</th><th>Factura/Origen</th><th class="num">Monto</th></tr>
     {% for m in movs %}
-    <tr>
+    <tr{% if m.archivo_id %} data-abrir="/archivo/{{ m.archivo_id }}" title="Doble click para ver la factura"{% endif %}>
       <td>{{ m.fecha }}</td><td class="mono">{{ m.patente }}</td><td class="ocultar-mov">{{ m.equipo }}</td>
       <td>{{ m.dueno }}</td><td class="mono">{{ m.tag }}</td><td>{{ m.concepto }}</td>
       <td>{{ origen(m) }}</td>

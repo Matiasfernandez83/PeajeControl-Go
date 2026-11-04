@@ -15,8 +15,8 @@
   <table>
     <tr><th>{{ etiqueta }}</th><th class="num">Operaciones</th><th class="num">{{ 'Patentes' if vista=='responsable' else 'Responsable' }}</th><th class="num">Total</th></tr>
     {% for g in grupos %}
-    <tr>
-      <td><a href="/ver/{{ 'vehiculo' if vista=='vehiculo' else 'dueno' }}?v={{ g.g|urlencode }}" target="_blank" rel="noopener"><b>{{ g.g }}</b></a></td><td class="num">{{ g.n }}</td>
+    <tr data-abrir="/ver/{{ 'vehiculo' if vista=='vehiculo' else 'dueno' }}?v={{ g.g|urlencode }}" title="Doble click para abrir en otra pestaña">
+      <td><a href="/ver/{{ 'vehiculo' if vista=='vehiculo' else 'dueno' }}?v={{ g.g|urlencode }}" target="_blank" rel="noopener"><b>{{ g.g }}</b></a>{% if g.g == 'S/D' %}<span class="sd-nota">sin patente</span>{% endif %}</td><td class="num">{{ g.n }}</td>
       <td class="num">{{ g.sub }}</td><td class="num">{{ g.t|pesos }}</td>
     </tr>
     {% else %}<tr><td colspan="4" class="td-vacio">{{ vacio('bandeja', 'Sin datos') }}</td></tr>{% endfor %}
@@ -52,7 +52,7 @@
       <th>Fecha</th><th>Patente</th><th class="ocultar-mov">Equipo</th><th>Responsable</th><th>TAG</th><th>Control</th><th>Factura/Origen</th><th class="num">Monto</th>
     </tr>
     {% for m in movs %}
-    <tr>
+    <tr{% if m.archivo_id %} data-abrir="/archivo/{{ m.archivo_id }}" title="Doble click para ver la factura"{% endif %}>
       <td><input type="checkbox" class="chk" name="ids" value="{{ m.id }}"></td>
       <td>{{ m.fecha }}</td><td class="mono">{{ m.patente }}</td><td class="ocultar-mov">{{ m.equipo }}</td>
       <td>{{ m.dueno }}</td><td class="mono">{{ m.tag }}</td>

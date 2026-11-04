@@ -3,25 +3,25 @@
 {% from "_paginado.html" import origen %}
 {% block cuerpo %}
 <h1>Dashboard</h1>
-<p class="sub">Hacé doble click en una tarjeta para ver el detalle completo.</p>
+<p class="sub">Hacé doble click en una tarjeta para abrir el detalle completo en otra pestaña.</p>
 
 <div class="kpis">
-  <div class="kpi" ondblclick="abrirDetalle('monto')">
+  <div class="kpi" ondblclick="abrirPestana('monto')" title="Doble click: abrir en otra pestaña">
     <div class="top"><div class="l">Monto total</div><div class="ic-box ac-verde"><svg class="i"><use href="#i-plata"/></svg></div></div>
     <div class="v">{{ kpi.total|pesos }}</div>
     <div class="s">Total facturado</div>
   </div>
-  <div class="kpi" ondblclick="abrirDetalle('camiones')">
+  <div class="kpi" ondblclick="abrirPestana('camiones')" title="Doble click: abrir en otra pestaña">
     <div class="top"><div class="l">Camiones activos</div><div class="ic-box ac-azul"><svg class="i"><use href="#i-camion"/></svg></div></div>
     <div class="v">{{ kpi.patentes }}</div>
     <div class="s">Patentes únicas detectadas</div>
   </div>
-  <div class="kpi" ondblclick="abrirDetalle('duenos')">
+  <div class="kpi" ondblclick="abrirPestana('duenos')" title="Doble click: abrir en otra pestaña">
     <div class="top"><div class="l">Responsables</div><div class="ic-box ac-violeta"><svg class="i"><use href="#i-usuarios"/></svg></div></div>
     <div class="v">{{ kpi.duenos }}</div>
     <div class="s">Proveedores distintos</div>
   </div>
-  <div class="kpi" ondblclick="abrirDetalle('operaciones')">
+  <div class="kpi" ondblclick="abrirPestana('operaciones')" title="Doble click: abrir en otra pestaña">
     <div class="top"><div class="l">Operaciones</div><div class="ic-box ac-naranja"><svg class="i"><use href="#i-rayo"/></svg></div></div>
     <div class="v">{{ kpi.n }}</div>
     <div class="s">Registros procesados</div>
@@ -31,7 +31,7 @@
 <div class="dos">
   <div class="tarjeta">
     <h3>Monto por responsable (Top 10)</h3>
-    <p class="mini">Hacé click en una barra para ver el detalle.</p>
+    <p class="mini">Click en una barra para ver sus movimientos.</p>
     {% for r in top %}
     <a class="barra" href="/movimientos?dueno={{ r.dueno|urlencode }}" title="{{ r.n }} operaciones">
       <span class="nombre">{{ r.dueno }}</span>
@@ -43,9 +43,9 @@
 
   <div class="tarjeta">
     <h3>Distribución de operaciones</h3>
-    <p class="mini">Verificación de TAGs contra la base de flota.</p>
+    <p class="mini">Verificación de TAGs contra la base de flota. Click en una barra para ver el detalle en otra pestaña.</p>
     {% for r in dist %}
-    <a class="barra" onclick="abrirDetalle('operaciones');return false;" href="#">
+    <a class="barra" href="/ver/{{ 'sinmatch' if 'Sin' in r.k else 'verificados' }}" target="_blank" rel="noopener" title="Abrir el detalle en otra pestaña">
       <span class="nombre">{{ r.k }}</span>
       <div class="relleno {{ 'gris' if 'Sin' in r.k else 'azul' }}" style="width:{{ (r.n / kpi.n * 100)|round(1) if kpi.n else 0 }}%"></div>
       <span class="valor">{{ r.n }} · {{ r.t|pesos }}</span>
@@ -68,7 +68,7 @@
   <table>
     <tr><th>Fecha</th><th>Patente</th><th class="ocultar-mov">Equipo</th><th>Responsable</th><th>TAG</th><th>Control</th><th>Factura/Origen</th><th class="num">Monto</th></tr>
     {% for m in ult %}
-    <tr>
+    <tr{% if m.archivo_id %} data-abrir="/archivo/{{ m.archivo_id }}" title="Doble click para ver la factura"{% endif %}>
       <td>{{ m.fecha }}</td><td class="mono">{{ m.patente }}</td>
       <td class="ocultar-mov">{{ m.equipo }}</td><td>{{ m.dueno }}</td><td class="mono">{{ m.tag }}</td>
       <td><span class="pill {{ 'ok' if m.verificado else 'sin' }}">{{ 'Verificado' if m.verificado else 'Sin control' }}</span></td>

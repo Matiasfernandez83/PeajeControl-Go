@@ -27,13 +27,13 @@
       <th>Nombre del archivo</th><th class="ocultar-mov">Fecha subida</th><th>Tipo</th><th class="num">Total doc.</th><th>Acciones</th>
     </tr>
     {% for a in historial %}
-    <tr>
+    <tr data-abrir="/factura/{{ a.nombre|urlencode }}" title="Doble click para ver la factura">
       <td><input type="checkbox" class="chk" name="nombres" value="{{ a.nombre }}"></td>
       <td>{{ a.nombre }}</td>
       <td class="ocultar-mov tenue">{{ a.creado }}</td>
       <td><span class="chip">{{ a.tipo|capitalize }}</span></td>
       <td class="num">{% if a.total_doc %}{{ a.total_doc|pesos }}{% else %}—{% endif %}</td>
-      <td>{% if a.tipo == 'Peajes' %}<a class="btn chico gh" href="/ver/factura?v={{ a.nombre|urlencode }}" target="_blank" rel="noopener">Ver detalle</a> {% endif %}<a class="btn chico gh" href="/reportes/descargar/{{ a.nombre|urlencode }}"><svg class="i"><use href="#i-bajar"/></svg>Descargar</a></td>
+      <td><a class="btn chico sec" href="/factura/{{ a.nombre|urlencode }}" target="_blank" rel="noopener"><svg class="i"><use href="#i-archivo"/></svg>Ver PDF</a> {% if a.tipo == 'Peajes' %}<a class="btn chico gh" href="/ver/factura?v={{ a.nombre|urlencode }}" target="_blank" rel="noopener">Ver detalle</a> {% endif %}<a class="btn chico gh" href="/reportes/descargar/{{ a.nombre|urlencode }}"><svg class="i"><use href="#i-bajar"/></svg>Descargar</a></td>
     </tr>
     {% else %}<tr><td colspan="6" class="td-vacio">{{ vacio('historial', 'Todavía no hay archivos en el historial', 'Los archivos que importes quedan guardados acá.') }}</td></tr>{% endfor %}
   </table>
