@@ -288,6 +288,29 @@ def test_flota_abm_manual():
            content_type="multipart/form-data")
     assert cx.execute("SELECT COUNT(*) n FROM flota WHERE empresa_id=1").fetchone()["n"] == 1
 
+def test_migracion_agrega_columnas_faltantes():
+    # Caso produccion: tabla archivos vieja SIN total_doc -> migrar la completa y /importar anda.
+    import sqlite3
+    cx = sqlite3.connect(os.path.join(_tmp, "vieja.db")); cx.row_factory = sqlite3.Row
+    cx.execute("CREATE TABLE archivos(id INTEGER PRIMARY KEY, nombre TEXT, tipo TEXT)")
+    cx.execute("INSERT INTO archivos(nombre,tipo) VALUES('a.pdf','Peajes')")
+    cx.execute("CREATE TABLE movimientos(id INTEGER PRIMARY KEY, fecha TEXT, tag TEXT, monto REAL)")
+    cx.execute("INSERT INTO movimientos(fecha,tag,monto) VALUES('01/01/2026','12345678',10)")
+    for t in ("usuarios", "flota", "resumenes", "gastos"):
+        cx.execute(f"CREATE TABLE {t}(id INTEGER PRIMARY KEY)")
+    cx.commit()
+    A.migrar(cx)
+    assert "total_doc" in A._columnas(cx, "archivos")
+    assert "archivo" in A._columnas(cx, "movimientos") and "dueno" in A._columnas(cx, "movimientos")
+    assert cx.execute("SELECT total_doc FROM archivos").fetchone()["total_doc"] == 0
+    cx.execute("UPDATE movimientos SET archivo='a.pdf', empresa_id=1"); cx.execute("UPDATE archivos SET empresa_id=1")
+    r = cx.execute("""SELECT m.archivo, COUNT(*) n, SUM(m.monto) t, COALESCE(MAX(a.total_doc),0) td
+        FROM movimientos m LEFT JOIN archivos a ON a.nombre=m.archivo AND a.empresa_id=m.empresa_id
+        WHERE m.empresa_id=1 GROUP BY m.archivo""").fetchall()
+    assert len(r) == 1 and r[0]["td"] == 0
+    A.migrar(cx)  # idempotente
+    cx.close()
+
 if __name__ == "__main__":
     fallos = 0
     for nombre, fn in list(globals().items()):
