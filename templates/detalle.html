@@ -26,9 +26,15 @@
 {% else %}
 <div class="tarjeta">
   {% if archivo %}
-  <p class="mini">
-    {{ archivo.tipo }} · subida {{ archivo.creado }}{% if archivo.total_doc %} · total del documento {{ archivo.total_doc|pesos }}{% endif %}
-  </p>
+  <p class="mini">{{ archivo.tipo }} · subida {{ archivo.creado }}</p>
+  <div class="tabla-wrap" style="margin-bottom:16px"><table>
+    <tr><th class="num">Suma extraída (pases)</th><th class="num">Neto del documento</th><th class="num">Bonificación</th><th class="num">Total a pagar</th></tr>
+    <tr><td class="num">{{ resumen.t|pesos }}</td>
+      <td class="num">{% if archivo.total_doc %}{{ archivo.total_doc|pesos }}{% else %}—{% endif %}</td>
+      <td class="num">{% if archivo.bonificacion %}-{{ archivo.bonificacion|pesos }}{% else %}—{% endif %}</td>
+      <td class="num"><b>{% if archivo.total_pagar %}{{ archivo.total_pagar|pesos }}{% else %}—{% endif %}</b></td></tr>
+  </table></div>
+  <p class="mini">Total a pagar = importe final de la factura (con IVA e impuestos y con la bonificación ya descontada). El control compara la suma de pases contra el neto del documento.</p>
   {% endif %}
   <form class="linea" method="get" style="margin-bottom:16px">
     <input type="text" name="q" value="{{ q }}" placeholder="Buscar patente, tag, concepto, responsable..." style="max-width:340px">

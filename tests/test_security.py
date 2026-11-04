@@ -301,6 +301,8 @@ def test_migracion_agrega_columnas_faltantes():
     cx.commit()
     A.migrar(cx)
     assert "total_doc" in A._columnas(cx, "archivos")
+    assert {"total_pagar", "bonificacion"} <= A._columnas(cx, "archivos")
+    assert cx.execute("SELECT total_pagar FROM archivos").fetchone()["total_pagar"] in (0, None)
     assert "archivo" in A._columnas(cx, "movimientos") and "dueno" in A._columnas(cx, "movimientos")
     assert cx.execute("SELECT total_doc FROM archivos").fetchone()["total_doc"] == 0
     cx.execute("UPDATE movimientos SET archivo='a.pdf', empresa_id=1"); cx.execute("UPDATE archivos SET empresa_id=1")
@@ -393,6 +395,32 @@ def test_trazabilidad_factura_pdf_y_detalle_paginado():
     hm = c.get("/movimientos").get_data(as_text=True)
     assert "Página 1 de" in hm and f"/archivo/{aid}" in hm
     assert "target=\"_blank\"" in c.get("/movimientos?vista=vehiculo").get_data(as_text=True)
+
+def test_total_a_pagar_y_bonificacion_visibles():
+    # Una factura con bonificacion guarda total_pagar y bonificacion y /importar, /ver/factura y el modal los muestran.
+    c = logueado()
+    original = A.extraer_items_peajes
+    items = [{"fecha": "01/10/2026", "tag": "55556666", "patente": "", "concepto": "Peaje", "monto": 483800.0, "cantidad": 1}]
+    A.extraer_items_peajes = lambda arch, contenido: (items, 483800.0, "AP01 Santa Fe", 383560.0, 100240.0)
+    try:
+        r = c.post("/importar", data={"_csrf": token(c, "/importar"), "archivo": (xlsx([["x"]]), "FC-BONIF.xlsx")},
+                   content_type="multipart/form-data")
+        assert r.status_code == 302
+    finally:
+        A.extraer_items_peajes = original
+    d = A._conectar()
+    try:
+        a = d.execute("SELECT total_doc,total_pagar,bonificacion FROM archivos WHERE nombre='FC-BONIF.xlsx'").fetchone()
+        assert (a["total_doc"], a["total_pagar"], a["bonificacion"]) == (483800.0, 383560.0, 100240.0)
+    finally:
+        d.close()
+    h = c.get("/importar").get_data(as_text=True)
+    assert "Total a pagar" in h and "383.560,00" in h and "100.240,00" in h, "importar no muestra total a pagar"
+    hv = c.get("/ver/factura?v=FC-BONIF.xlsx").get_data(as_text=True)
+    assert "Total a pagar" in hv and "383.560,00" in hv and "100.240,00" in hv
+    j = c.get("/detalle/factura?v=FC-BONIF.xlsx").get_json()
+    assert j["factura"]["total_pagar"] == 383560.0 and j["factura"]["bonificacion"] == 100240.0
+    assert j["factura"]["suma"] == 483800.0
 
 if __name__ == "__main__":
     fallos = 0

@@ -166,7 +166,8 @@ def _esquema():
         patente TEXT, concepto TEXT, monto {real}, dueno TEXT, equipo TEXT,
         verificado INTEGER DEFAULT 0, archivo TEXT, creado TEXT);
     CREATE TABLE IF NOT EXISTS archivos(id {pk}, empresa_id INTEGER, nombre TEXT, tipo TEXT,
-        total_doc {real} DEFAULT 0, contenido TEXT, mime TEXT, creado TEXT);
+        total_doc {real} DEFAULT 0, contenido TEXT, mime TEXT, creado TEXT,
+        total_pagar {real} DEFAULT 0, bonificacion {real} DEFAULT 0);
     CREATE TABLE IF NOT EXISTS resumenes(id {pk}, empresa_id INTEGER, archivo TEXT, banco TEXT,
         titular TEXT, periodo TEXT, vencimiento TEXT, total_resumen {real}, creado TEXT);
     CREATE TABLE IF NOT EXISTS gastos(id {pk}, empresa_id INTEGER, resumen_id INTEGER,
@@ -193,9 +194,12 @@ def _fix_archivos_unique(con):
             cols = [c["name"] for c in con.execute(f"PRAGMA index_info({idx['name']})").fetchall()]
             if cols == ["nombre"]:
                 con.execute("""CREATE TABLE archivos_new(id INTEGER PRIMARY KEY, empresa_id INTEGER,
-                    nombre TEXT, tipo TEXT, total_doc REAL DEFAULT 0, contenido TEXT, mime TEXT, creado TEXT)""")
-                con.execute("""INSERT INTO archivos_new(id,empresa_id,nombre,tipo,total_doc,contenido,mime,creado)
-                    SELECT id,empresa_id,nombre,tipo,total_doc,contenido,mime,creado FROM archivos""")
+                    nombre TEXT, tipo TEXT, total_doc REAL DEFAULT 0, contenido TEXT, mime TEXT, creado TEXT,
+                    total_pagar REAL DEFAULT 0, bonificacion REAL DEFAULT 0)""")
+                cols = [c for c in ("id","empresa_id","nombre","tipo","total_doc","contenido","mime","creado",
+                                    "total_pagar","bonificacion") if c in _columnas(con, "archivos")]
+                lc = ",".join(cols)
+                con.execute(f"INSERT INTO archivos_new({lc}) SELECT {lc} FROM archivos")
                 con.execute("DROP TABLE archivos")
                 con.execute("ALTER TABLE archivos_new RENAME TO archivos")
                 break
@@ -213,7 +217,8 @@ def _columnas_esperadas():
                         ("monto", real), ("dueno", "TEXT"), ("equipo", "TEXT"),
                         ("verificado", "INTEGER DEFAULT 0"), ("archivo", "TEXT"), ("creado", "TEXT")],
         "archivos": [("nombre", "TEXT"), ("tipo", "TEXT"), ("total_doc", real + " DEFAULT 0"),
-                     ("contenido", "TEXT"), ("mime", "TEXT"), ("creado", "TEXT")],
+                     ("contenido", "TEXT"), ("mime", "TEXT"), ("creado", "TEXT"),
+                     ("total_pagar", real + " DEFAULT 0"), ("bonificacion", real + " DEFAULT 0")],
         "resumenes": [("archivo", "TEXT"), ("banco", "TEXT"), ("titular", "TEXT"), ("periodo", "TEXT"),
                       ("vencimiento", "TEXT"), ("total_resumen", real), ("creado", "TEXT")],
         "gastos": [("resumen_id", "INTEGER"), ("fecha", "TEXT"), ("concepto", "TEXT"),
@@ -450,6 +455,34 @@ def _neto_declarado(texto, emisor):
             neto = norm_monto(toks[i])
     return neto
 
+RE_TOTAL_A_PAGAR = re.compile(r"TOTAL A PAGAR\s+(" + _MONTO + r")(?![\d.,]*\d)")
+
+def _total_a_pagar(texto):
+    """Importe final con IVA e impuestos que se paga. Devuelve 0.0 si la factura no lo declara."""
+    lineas = texto.split("\n")
+    total = 0.0
+    for i, linea in enumerate(lineas):
+        m = RE_TOTAL_A_PAGAR.search(linea)          # AUBASA, Mercosur, GCO, AP01 (ultima hoja)
+        if m:
+            total = norm_monto(m.group(1)); continue
+        if linea.strip() == "Total":                 # AUSA: "Total" y debajo el importe
+            if i + 1 < len(lineas):
+                mt = RE_MONTO_PEAJE.fullmatch(lineas[i + 1].strip())
+                if mt: total = norm_monto(mt.group(0))
+        elif RE_SOLO_NUMEROS.match(linea):
+            toks = RE_MONTO_PEAJE.findall(linea)
+            if len(toks) >= 6:                       # CEAMSE / AUSOL: ultima cifra de la fila de totales
+                total = norm_monto(toks[-1])
+            elif len(toks) >= 4 and "Total" in linea:  # Caminos: "... Total 967922.86"
+                total = norm_monto(toks[-1])
+    return total
+
+def _bonificacion(items, ajustes):
+    """Suma (en positivo) de las bonificaciones de la factura, con o sin TAG."""
+    b = sum(m for n, m in ajustes if "BONIF" in n.upper())
+    b += sum(i["monto"] for i in items if "BONIF" in i["concepto"].upper() and i["monto"] < 0)
+    return round(abs(b), 2)
+
 def _limpiar_concepto(seg):
     seg = re.sub(r"^\s*GASTOS ADMINISTRATIVOS\s+" + _MONTO + r"\s*", "", seg, flags=re.I)
     seg = re.sub(r"^\s*\d+\s+", "", seg)
@@ -515,13 +548,14 @@ def analizar_texto_peajes(texto):
     # AUSA: el AJUSTE CONTRIBUCION ESPECIAL va como "No gravado", fuera del neto de pases.
     aj = sum(m for n, m in ajustes if "CONTRIBUCION" not in n.upper())
     return {"emisor": emisor, "items": items, "ajustes": ajustes, "neto": neto,
-            "total_doc": round(neto - aj, 2) if neto else 0.0}
+            "total_doc": round(neto - aj, 2) if neto else 0.0,
+            "total_pagar": _total_a_pagar(texto), "bonificacion": _bonificacion(items, ajustes)}
 
 def parsear_pdf_peajes(archivo):
     r = parsear_factura_peajes(archivo)
     if not r["emisor"] and not r["items"]:
         raise ValueError("no reconozco el emisor de este PDF (no es una factura de peaje conocida).")
-    return r["items"], r["total_doc"], r["emisor"]
+    return r["items"], r["total_doc"], r["emisor"], r["total_pagar"], r["bonificacion"]
 
 def parsear_pdf_tarjeta(archivo):
     texto = texto_pdf(archivo)
@@ -574,16 +608,17 @@ def extraer_items_peajes(arch, contenido):
         items.append({"fecha": fmt_fecha(get("fecha")), "tag": norm_tag(get("tag")),
                       "patente": str(get("patente") or "").strip().upper(),
                       "concepto": str(get("concepto") or "Peaje").strip(), "monto": monto})
-    return items, 0.0, "Excel/CSV"
+    return items, 0.0, "Excel/CSV", 0.0, 0.0
 
-def guardar_archivo(nombre, tipo, total_doc, contenido, mime):
+def guardar_archivo(nombre, tipo, total_doc, contenido, mime, total_pagar=0.0, bonificacion=0.0):
     b64 = base64.b64encode(contenido).decode() if contenido else ""
     d = db()
     # Reemplazo scopeado por empresa (equivale a un upsert por empresa_id+nombre).
     d.execute("DELETE FROM archivos WHERE empresa_id=? AND nombre=?", (emp(), nombre))
-    d.execute("""INSERT INTO archivos(empresa_id,nombre,tipo,total_doc,contenido,mime,creado)
-        VALUES(?,?,?,?,?,?,?)""",
-        (emp(), nombre, tipo, total_doc, b64, mime, datetime.now().strftime("%d/%m/%Y %H:%M")))
+    d.execute("""INSERT INTO archivos(empresa_id,nombre,tipo,total_doc,contenido,mime,creado,total_pagar,bonificacion)
+        VALUES(?,?,?,?,?,?,?,?,?)""",
+        (emp(), nombre, tipo, total_doc, b64, mime, datetime.now().strftime("%d/%m/%Y %H:%M"),
+         total_pagar or 0, bonificacion or 0))
 
 # ================= AUTENTICACION =================
 def emp():
@@ -707,7 +742,13 @@ def detalle(tipo):
     else:
         titulo, cond, args, orden, _ = filtro_detalle(tipo, arg)
         rows = d.execute(SEL_MOV + f" WHERE m.empresa_id=? AND {cond} ORDER BY {orden} LIMIT 1000", [E] + args).fetchall()
-    return jsonify(titulo=titulo, modo="detalle", pagina=pagina_url, filas=[dict(r) for r in rows])
+    factura = None
+    if tipo == "factura":   # cabecera de control para el modal: pases vs total que se paga
+        a = d.execute("SELECT total_doc,total_pagar,bonificacion FROM archivos WHERE empresa_id=? AND nombre=?", (E, arg)).fetchone()
+        if a:
+            factura = {"suma": round(sum(r["monto"] or 0 for r in rows), 2), "total_doc": a["total_doc"] or 0,
+                       "bonificacion": a["bonificacion"] or 0, "total_pagar": a["total_pagar"] or 0}
+    return jsonify(titulo=titulo, modo="detalle", pagina=pagina_url, filas=[dict(r) for r in rows], factura=factura)
 
 # --- Paginas de detalle standalone (abribles en otra pestaña, con paginado y filtros por URL) ---
 # /ver/<tipo>?v=<valor>&q=<busqueda>&p=<pagina>
@@ -746,7 +787,7 @@ def ver(tipo):
     movs = d.execute(SEL_MOV + where + f" ORDER BY {orden} LIMIT ? OFFSET ?", args + [MOV_POR_PAGINA, off]).fetchall()
     archivo = None
     if tipo == "factura":
-        archivo = d.execute("SELECT id,nombre,tipo,total_doc,mime,creado FROM archivos WHERE empresa_id=? AND nombre=?",
+        archivo = d.execute("SELECT id,nombre,tipo,total_doc,total_pagar,bonificacion,mime,creado FROM archivos WHERE empresa_id=? AND nombre=?",
                             (E, arg)).fetchone()
     return render_template("detalle.html", modo="detalle", titulo=titulo, volver=volver, tipo=tipo, enlace="",
                            movs=movs, grupos=[], total=resumen["n"], resumen=resumen, pagina=pagina, paginas=paginas,
@@ -832,7 +873,7 @@ def procesar_peaje(arch, flota_map, flota_pat):
     r = {"archivo": arch.filename, "emisor": "", "pasadas": 0, "estado": "error", "mensaje": ""}
     try:
         contenido = arch.read()
-        items, total_doc, r["emisor"] = extraer_items_peajes(arch, contenido)
+        items, total_doc, r["emisor"], total_pagar, bonif = extraer_items_peajes(arch, contenido)
     except Exception as e:
         r["mensaje"] = str(e); return r
     if not items:
@@ -850,7 +891,7 @@ def procesar_peaje(arch, flota_map, flota_pat):
     d.executemany("""INSERT INTO movimientos(empresa_id,fecha,tag,patente,concepto,monto,
         dueno,equipo,verificado,archivo,creado) VALUES(?,?,?,?,?,?,?,?,?,?,?)""", nuevos)
     mime = "application/pdf" if arch.filename.lower().endswith(".pdf") else "application/vnd.ms-excel"
-    guardar_archivo(arch.filename, "Peajes", total_doc, contenido, mime)
+    guardar_archivo(arch.filename, "Peajes", total_doc, contenido, mime, total_pagar, bonif)
     d.commit()
     ok = sum(1 for n in nuevos if n[8])
     r["pasadas"] = len(nuevos)
@@ -886,7 +927,8 @@ def importar():
             flash(f"⚠ Se procesaron los primeros {MAX_ARCHIVOS_CARGA} archivos; quedaron sin procesar {len(omitidos)}.")
         return redirect("/importar")
     flota_n = d.execute("SELECT COUNT(*) n FROM flota WHERE empresa_id=?", (emp(),)).fetchone()["n"]
-    archivos = d.execute("""SELECT m.archivo, COUNT(*) n, SUM(m.monto) t, COALESCE(MAX(a.total_doc),0) td
+    archivos = d.execute("""SELECT m.archivo, COUNT(*) n, SUM(m.monto) t, COALESCE(MAX(a.total_doc),0) td,
+        COALESCE(MAX(a.total_pagar),0) tp, COALESCE(MAX(a.bonificacion),0) bon
         FROM movimientos m LEFT JOIN archivos a ON a.nombre=m.archivo AND a.empresa_id=?
         WHERE m.empresa_id=? GROUP BY m.archivo ORDER BY MAX(m.id) DESC""", (emp(), emp())).fetchall()
     return render_template("importar.html", archivos=archivos, flota_n=flota_n)
