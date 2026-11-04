@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% from "_vacio.html" import vacio %}
+{% from "_paginado.html" import paginado, origen %}
+{% block cuerpo %}
+<h1>{{ titulo }}</h1>
+<p class="sub"><a href="{{ volver }}">&larr; Volver</a></p>
+
+{% if modo == 'grupo' %}
+<div class="tarjeta">
+  <div class="tabla-wrap">
+  <table>
+    <tr><th>{{ 'Vehículo' if tipo=='camiones' else 'Responsable' }}</th><th class="num">Operaciones</th><th class="num">{{ 'Responsable' if tipo=='camiones' else 'Patentes' }}</th><th class="num">Total</th></tr>
+    {% for g in grupos %}
+    <tr>
+      <td><a href="/ver/{{ enlace }}?v={{ g.g|urlencode }}" target="_blank" rel="noopener"><b>{{ g.g }}</b></a></td>
+      <td class="num">{{ g.n }}</td><td class="num">{{ g.sub }}</td><td class="num">{{ g.t|pesos }}</td>
+    </tr>
+    {% else %}<tr><td colspan="4" class="td-vacio">{{ vacio('bandeja', 'Sin datos') }}</td></tr>{% endfor %}
+  </table>
+  </div>
+  {{ paginado(pagina, paginas) }}
+</div>
+{% else %}
+<div class="tarjeta">
+  {% if archivo %}
+  <p class="mini">
+    <a class="btn chico sec" href="/archivo/{{ archivo.id }}" target="_blank" rel="noopener">Ver factura</a>
+    {{ archivo.tipo }} · subida {{ archivo.creado }}{% if archivo.total_doc %} · total del documento {{ archivo.total_doc|pesos }}{% endif %}
+  </p>
+  {% endif %}
+  <form class="linea" method="get" style="margin-bottom:16px">
+    <input type="text" name="q" value="{{ q }}" placeholder="Buscar patente, tag, concepto, responsable..." style="max-width:340px">
+    {% if arg %}<input type="hidden" name="v" value="{{ arg }}">{% endif %}
+    <button class="btn chico" type="submit"><svg class="i"><use href="#i-buscar"/></svg>Buscar</button>
+  </form>
+  <div class="acciones" style="gap:24px;align-items:baseline;margin-bottom:12px">
+    <div><span class="dato">{{ resumen.n }}</span> <span class="mini" style="margin:0">registros</span></div>
+    <div><span class="dato" style="color:var(--rojo)">{{ resumen.t|pesos }}</span> <span class="mini" style="margin:0">total</span></div>
+  </div>
+  <div class="tabla-wrap">
+  <table>
+    <tr><th>Fecha</th><th>Patente</th><th class="ocultar-mov">Equipo</th><th>Responsable</th><th>TAG</th><th>Concepto</th><th>Factura/Origen</th><th class="num">Monto</th></tr>
+    {% for m in movs %}
+    <tr>
+      <td>{{ m.fecha }}</td><td class="mono">{{ m.patente }}</td><td class="ocultar-mov">{{ m.equipo }}</td>
+      <td>{{ m.dueno }}</td><td class="mono">{{ m.tag }}</td><td>{{ m.concepto }}</td>
+      <td>{{ origen(m) }}</td>
+      <td class="num">{{ m.monto|pesos }}</td>
+    </tr>
+    {% else %}<tr><td colspan="8" class="td-vacio">{{ vacio('buscar', 'Sin resultados', 'No hay movimientos para este detalle.') }}</td></tr>{% endfor %}
+  </table>
+  </div>
+  {{ paginado(pagina, paginas) }}
+</div>
+{% endif %}
+{% endblock %}

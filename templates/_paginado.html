@@ -1,0 +1,15 @@
+{# Controles de paginado: conserva todos los parametros de la URL (filtros) y cambia solo p. #}
+{% macro paginado(pagina, paginas) %}
+{% if paginas > 1 %}
+<div class="linea" style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:16px">
+  {% if pagina > 1 %}<a class="btn chico gh" href="{{ request.path }}?{{ dict(request.args.to_dict(), p=pagina - 1)|urlencode }}">&larr; Anterior</a>{% endif %}
+  <span class="mini" style="margin:0">Página {{ pagina }} de {{ paginas }}</span>
+  {% if pagina < paginas %}<a class="btn chico gh" href="{{ request.path }}?{{ dict(request.args.to_dict(), p=pagina + 1)|urlencode }}">Siguiente &rarr;</a>{% endif %}
+</div>
+{% endif %}
+{% endmacro %}
+
+{# Celda "Factura/Origen": link al PDF guardado (si existe) o solo el nombre. #}
+{% macro origen(m) %}
+{% if m.archivo_id %}<a href="/archivo/{{ m.archivo_id }}" target="_blank" rel="noopener" title="Ver la factura">{{ m.archivo }}</a>{% else %}<span class="tenue">{{ m.archivo or '—' }}</span>{% endif %}
+{% endmacro %}

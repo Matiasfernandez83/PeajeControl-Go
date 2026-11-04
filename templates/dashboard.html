@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_vacio.html" import vacio %}
+{% from "_paginado.html" import origen %}
 {% block cuerpo %}
 <h1>Dashboard</h1>
 <p class="sub">Hacé doble click en una tarjeta para ver el detalle completo.</p>
@@ -65,15 +66,16 @@
   </div>
   <div class="tabla-wrap">
   <table>
-    <tr><th>Fecha</th><th>Patente</th><th class="ocultar-mov">Equipo</th><th>Responsable</th><th>TAG</th><th>Control</th><th class="num">Monto</th></tr>
+    <tr><th>Fecha</th><th>Patente</th><th class="ocultar-mov">Equipo</th><th>Responsable</th><th>TAG</th><th>Control</th><th>Factura/Origen</th><th class="num">Monto</th></tr>
     {% for m in ult %}
     <tr>
       <td>{{ m.fecha }}</td><td class="mono">{{ m.patente }}</td>
       <td class="ocultar-mov">{{ m.equipo }}</td><td>{{ m.dueno }}</td><td class="mono">{{ m.tag }}</td>
       <td><span class="pill {{ 'ok' if m.verificado else 'sin' }}">{{ 'Verificado' if m.verificado else 'Sin control' }}</span></td>
+      <td>{{ origen(m) }}</td>
       <td class="num">{{ m.monto|pesos }}</td>
     </tr>
-    {% else %}<tr><td colspan="7" class="td-vacio">{{ vacio('bandeja', 'Sin movimientos todavía', 'Cuando importes facturas, los últimos pases aparecen acá.') }}</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="8" class="td-vacio">{{ vacio('bandeja', 'Sin movimientos todavía', 'Cuando importes facturas, los últimos pases aparecen acá.') }}</td></tr>{% endfor %}
   </table>
   </div>
 </div>
