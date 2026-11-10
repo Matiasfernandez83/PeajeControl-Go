@@ -100,3 +100,11 @@ Si no se cargan, la landing muestra datos de ejemplo (`tuemail@peajecontrol.com`
 - **Mejoras menores**: se borró el modal/endpoint de detalle que ya no se usaba (el tablero abre
   `/ver/...`), tipografía Inter propia en `static/fonts/` (sin Google Fonts), caché de estáticos de
   1 año con URLs versionadas (`?v=<huella>`), y contacto de la landing configurable por variables de entorno.
+
+## Mantener la app despierta (plan gratis de Render)
+
+Render duerme el servicio tras 15 minutos sin tráfico. El workflow `.github/workflows/mantener-despierta.yml`
+hace un GET a `/salud` (responde `ok`, sin base de datos ni login) cada 5 minutos; al ser repo público, Actions es gratis.
+Límites: el plan gratis da 750 horas por mes por workspace, alcanza para UN solo servicio prendido todo el mes
+(no pinguear el servicio duplicado). Los cron de GitHub pueden atrasarse algunos minutos.
+Al conectar el dominio propio, cambiar `APP_URL` en el workflow.
