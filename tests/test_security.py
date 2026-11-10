@@ -289,8 +289,8 @@ def test_carga_multiple_tope():
 
 def test_carga_multiple_resumenes():
     c = logueado()
-    def f(n): return (xlsx([["FECHA", "DESCRIPCION", "MONTO"], ["01/10/2026", "SHELL combustible", "1.000,00"]]), n)
-    r = c.post("/gastos", data={"_csrf": token(c, "/gastos"), "archivo": [f("r1.xlsx"), f("r2.xlsx")]},
+    def f(n, monto): return (xlsx([["FECHA", "DESCRIPCION", "MONTO"], ["01/10/2026", "SHELL combustible", monto]]), n)
+    r = c.post("/gastos", data={"_csrf": token(c, "/gastos"), "archivo": [f("r1.xlsx", "1.000,00"), f("r2.xlsx", "2.000,00")]},
                content_type="multipart/form-data", follow_redirects=True)
     html = r.get_data(as_text=True)
     assert "r1.xlsx" in html and "r2.xlsx" in html and html.count("1 consumos") >= 2
@@ -541,6 +541,124 @@ def test_flota_carga_masiva_en_bloques_postgres():
     finally: d.close()
     assert 1 <= len(llamadas) <= -(-N // 500) + 1, f"{len(llamadas)} envios para {N} filas: no va en bloques"
     assert seg < 20, f"cargar {N} equipos tardo {seg:.1f}s"
+
+# ---------------- archivos duplicados ----------------
+def _subir(c, ruta, archivos):
+    r = c.post(ruta, data={"_csrf": token(c, ruta), "archivo": archivos},
+               content_type="multipart/form-data", follow_redirects=True)
+    assert r.status_code == 200, r.status_code
+    return r.get_data(as_text=True)
+
+def _peajes(nombre, tag, monto="100,00"):
+    return (xlsx([["FECHA", "TAG", "CONCEPTO", "IMPORTE"], ["01/10/2026", tag, "Peaje dup", monto]]), nombre)
+
+def _cuenta(tabla, donde="1=1", args=()):
+    d = A._conectar()
+    try: return d.execute(f"SELECT COUNT(*) n FROM {tabla} WHERE {donde}", args).fetchone()["n"]
+    finally: d.close()
+
+def test_mismo_archivo_dos_veces_no_duplica():
+    c = logueado()
+    contenido = _peajes("dup_a.xlsx", "7000000000000001")[0].getvalue()
+    h1 = _subir(c, "/importar", [(io.BytesIO(contenido), "dup_a.xlsx")])
+    assert "dup_a.xlsx" in h1 and "1 pasadas" in h1
+    h2 = _subir(c, "/importar", [(io.BytesIO(contenido), "dup_a.xlsx")])
+    assert "«dup_a.xlsx» ya estaba cargado (el " in h2 and "No se duplicó." in h2, h2
+    assert _cuenta("movimientos", "archivo=?", ("dup_a.xlsx",)) == 1
+    assert _cuenta("archivos", "nombre=?", ("dup_a.xlsx",)) == 1
+    # mismo contenido con OTRO nombre tambien es duplicado
+    h3 = _subir(c, "/importar", [(io.BytesIO(contenido), "dup_a_copia.xlsx")])
+    assert "ya estaba cargado" in h3 and _cuenta("movimientos", "archivo=?", ("dup_a_copia.xlsx",)) == 0
+    # en una carga multiple el duplicado no corta a los demas
+    h4 = _subir(c, "/importar", [(io.BytesIO(contenido), "dup_a.xlsx"), _peajes("dup_otro.xlsx", "7000000000000002")])
+    assert "No se duplicó." in h4 and "dup_otro.xlsx" in h4 and "1 pasadas" in h4
+    assert _cuenta("movimientos", "archivo=?", ("dup_otro.xlsx",)) == 1
+
+def test_mismo_nombre_contenido_distinto_conviven():
+    c = logueado()
+    _subir(c, "/importar", [_peajes("igual.xlsx", "7100000000000001", "100,00")])
+    h = _subir(c, "/importar", [_peajes("igual.xlsx", "7100000000000002", "250,00")])
+    assert "igual (2).xlsx" in h and "No se duplicó" not in h
+    d = A._conectar()
+    try:
+        a = d.execute("SELECT id FROM archivos WHERE empresa_id=1 AND nombre='igual.xlsx'").fetchone()
+        b = d.execute("SELECT id FROM archivos WHERE empresa_id=1 AND nombre='igual (2).xlsx'").fetchone()
+        assert a and b and a["id"] != b["id"]
+        m1 = d.execute("SELECT monto FROM movimientos WHERE archivo='igual.xlsx'").fetchall()
+        m2 = d.execute("SELECT monto FROM movimientos WHERE archivo='igual (2).xlsx'").fetchall()
+        assert [x["monto"] for x in m1] == [100.0] and [x["monto"] for x in m2] == [250.0]
+    finally: d.close()
+    # cada pase queda ligado a su propio archivo
+    movs = c.get("/movimientos").get_data(as_text=True)
+    assert f"/archivo/{a['id']}" in movs and f"/archivo/{b['id']}" in movs
+
+def test_duplicados_aislados_por_empresa():
+    c = logueado()
+    contenido = _peajes("emp.xlsx", "7200000000000001")[0].getvalue()
+    _subir(c, "/importar", [(io.BytesIO(contenido), "emp.xlsx")])
+    post(c, "/empresas/crear", {"empresa": "Dup SA", "email": "dup@test.com", "clave": "dupdupdup", "nombre": "D"}, "/empresas")
+    c2 = cliente(); assert login(c2, "dup@test.com", "dupdupdup").status_code == 302
+    h = _subir(c2, "/importar", [(io.BytesIO(contenido), "emp.xlsx")])
+    assert "ya estaba cargado" not in h and "1 pasadas" in h
+    assert _cuenta("movimientos", "archivo='emp.xlsx'") == 2   # uno por empresa
+
+def test_archivo_viejo_sin_huella_usa_nombre_total_y_cantidad():
+    c = logueado()
+    contenido = _peajes("viejo.xlsx", "7300000000000001")[0].getvalue()
+    _subir(c, "/importar", [(io.BytesIO(contenido), "viejo.xlsx")])
+    d = A._conectar(); d.execute("UPDATE archivos SET huella=NULL WHERE nombre='viejo.xlsx'"); d.commit(); d.close()
+    assert "ya estaba cargado" in _subir(c, "/importar", [(io.BytesIO(contenido), "viejo.xlsx")])
+    assert _cuenta("movimientos", "archivo='viejo.xlsx'") == 1
+    # mismo nombre pero otra cantidad de pases: no es el mismo
+    dos = (xlsx([["FECHA", "TAG", "CONCEPTO", "IMPORTE"], ["01/10/2026", "7300000000000001", "a", "100,00"],
+                 ["02/10/2026", "7300000000000001", "b", "5,00"]]), "viejo.xlsx")
+    assert "viejo (2).xlsx" in _subir(c, "/importar", [dos])
+
+def test_borrar_movimientos_del_archivo_permite_recargarlo():
+    c = logueado()
+    contenido = _peajes("recarga.xlsx", "7400000000000001")[0].getvalue()
+    _subir(c, "/importar", [(io.BytesIO(contenido), "recarga.xlsx")])
+    post(c, "/movimientos/borrar", {"archivo": "recarga.xlsx"}, "/movimientos")
+    assert _cuenta("movimientos", "archivo='recarga.xlsx'") == 0
+    h = _subir(c, "/importar", [(io.BytesIO(contenido), "recarga.xlsx")])
+    assert "ya estaba cargado" not in h and "1 pasadas" in h
+    assert _cuenta("movimientos", "archivo='recarga.xlsx'") == 1 and _cuenta("archivos", "nombre='recarga.xlsx'") == 1
+
+def test_resumen_duplicado_y_mismo_nombre():
+    c = logueado()
+    def res(monto): return xlsx([["FECHA", "DESCRIPCION", "MONTO"], ["01/10/2026", "SHELL combustible", monto]])
+    a = res("1.000,00").getvalue()
+    assert "procesado" in _subir(c, "/gastos", [(io.BytesIO(a), "tarjeta_dup.xlsx")])
+    h = _subir(c, "/gastos", [(io.BytesIO(a), "tarjeta_dup.xlsx")])
+    assert "«tarjeta_dup.xlsx» ya estaba cargado" in h and "No se duplicó." in h
+    assert _cuenta("resumenes", "archivo='tarjeta_dup.xlsx'") == 1
+    h = _subir(c, "/gastos", [(res("2.000,00"), "tarjeta_dup.xlsx")])
+    assert "tarjeta_dup (2).xlsx" in h
+    assert _cuenta("resumenes", "archivo='tarjeta_dup (2).xlsx'") == 1
+
+def test_fallo_a_mitad_hace_rollback():
+    c = logueado()
+    original = A.guardar_archivo
+    def roto(*a, **k):   # falla DESPUES de insertar los movimientos, con un error real de SQL
+        A.db().execute("INSERT INTO tabla_que_no_existe(x) VALUES(1)")
+    A.guardar_archivo = roto
+    try:
+        h = _subir(c, "/importar", [_peajes("falla.xlsx", "7500000000000001")])
+        hg = _subir(c, "/gastos", [(xlsx([["FECHA", "DESCRIPCION", "MONTO"], ["01/10/2026", "x", "10,00"]]), "falla_t.xlsx")])
+    finally:
+        A.guardar_archivo = original
+    assert "no se pudo guardar" in h and "No se cargó nada" in h
+    assert "no se pudo guardar" in hg
+    assert _cuenta("movimientos", "archivo='falla.xlsx'") == 0 and _cuenta("archivos", "nombre='falla.xlsx'") == 0
+    assert _cuenta("resumenes", "archivo='falla_t.xlsx'") == 0 and _cuenta("gastos", "concepto='x'") == 0
+    # la conexion sigue sana: el siguiente archivo (mismo request) se carga bien
+    h = _subir(c, "/importar", [_peajes("falla.xlsx", "7500000000000001"), _peajes("sigue.xlsx", "7500000000000002")])
+    assert "falla.xlsx" in h and "sigue.xlsx" in h and h.count("1 pasadas") == 2
+    assert _cuenta("movimientos", "archivo='falla.xlsx'") == 1
+
+def test_esquema_tiene_huella():
+    assert "huella" in A._columnas(A._conectar(), "archivos")
+    assert ("huella", "TEXT") in A._columnas_esperadas()["archivos"]
 
 if __name__ == "__main__":
     fallos = 0
