@@ -226,7 +226,7 @@ def _esquema():
         patente TEXT, concepto TEXT, monto {real}, dueno TEXT, equipo TEXT,
         verificado INTEGER DEFAULT 0, archivo TEXT, creado TEXT);
     CREATE TABLE IF NOT EXISTS archivos(id {pk}, empresa_id INTEGER, nombre TEXT, tipo TEXT,
-        total_doc {real} DEFAULT 0, contenido TEXT, mime TEXT, creado TEXT);
+        total_doc {real} DEFAULT 0, contenido TEXT, mime TEXT, creado TEXT, huella TEXT);
     CREATE TABLE IF NOT EXISTS resumenes(id {pk}, empresa_id INTEGER, archivo TEXT, banco TEXT,
         titular TEXT, periodo TEXT, vencimiento TEXT, total_resumen {real}, creado TEXT);
     CREATE TABLE IF NOT EXISTS gastos(id {pk}, empresa_id INTEGER, resumen_id INTEGER,
@@ -253,9 +253,9 @@ def _fix_archivos_unique(con):
             cols = [c["name"] for c in con.execute(f"PRAGMA index_info({idx['name']})").fetchall()]
             if cols == ["nombre"]:
                 con.execute("""CREATE TABLE archivos_new(id INTEGER PRIMARY KEY, empresa_id INTEGER,
-                    nombre TEXT, tipo TEXT, total_doc REAL DEFAULT 0, contenido TEXT, mime TEXT, creado TEXT)""")
-                con.execute("""INSERT INTO archivos_new(id,empresa_id,nombre,tipo,total_doc,contenido,mime,creado)
-                    SELECT id,empresa_id,nombre,tipo,total_doc,contenido,mime,creado FROM archivos""")
+                    nombre TEXT, tipo TEXT, total_doc REAL DEFAULT 0, contenido TEXT, mime TEXT, creado TEXT, huella TEXT)""")
+                con.execute("""INSERT INTO archivos_new(id,empresa_id,nombre,tipo,total_doc,contenido,mime,creado,huella)
+                    SELECT id,empresa_id,nombre,tipo,total_doc,contenido,mime,creado,huella FROM archivos""")
                 con.execute("DROP TABLE archivos")
                 con.execute("ALTER TABLE archivos_new RENAME TO archivos")
                 break
@@ -273,7 +273,7 @@ def _columnas_esperadas():
                         ("monto", real), ("dueno", "TEXT"), ("equipo", "TEXT"),
                         ("verificado", "INTEGER DEFAULT 0"), ("archivo", "TEXT"), ("creado", "TEXT")],
         "archivos": [("nombre", "TEXT"), ("tipo", "TEXT"), ("total_doc", real + " DEFAULT 0"),
-                     ("contenido", "TEXT"), ("mime", "TEXT"), ("creado", "TEXT")],
+                     ("contenido", "TEXT"), ("mime", "TEXT"), ("creado", "TEXT"), ("huella", "TEXT")],
         "resumenes": [("archivo", "TEXT"), ("banco", "TEXT"), ("titular", "TEXT"), ("periodo", "TEXT"),
                       ("vencimiento", "TEXT"), ("total_resumen", real), ("creado", "TEXT")],
         "gastos": [("resumen_id", "INTEGER"), ("fecha", "TEXT"), ("concepto", "TEXT"),
@@ -309,6 +309,7 @@ def migrar(con):
     # Indices por empresa (se crean recien aca, ya con la columna presente).
     con.execute("CREATE INDEX IF NOT EXISTS idx_mov_emp ON movimientos(empresa_id)")
     con.execute("CREATE INDEX IF NOT EXISTS idx_arch_emp ON archivos(empresa_id, nombre)")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_arch_huella ON archivos(empresa_id, huella)")
     # Indices para las pantallas pesadas (filtros por empresa + orden/agrupacion). Compatibles con SQLite y Postgres.
     for ddl in ("idx_mov_emp_id ON movimientos(empresa_id, id)",
                 "idx_mov_emp_patente ON movimientos(empresa_id, patente)",
@@ -636,14 +637,57 @@ def extraer_items_peajes(arch, contenido):
                       "concepto": str(get("concepto") or "Peaje").strip(), "monto": monto})
     return items, 0.0, "Excel/CSV"
 
-def guardar_archivo(nombre, tipo, total_doc, contenido, mime):
+def guardar_archivo(nombre, tipo, total_doc, contenido, mime, huella=""):
+    """Guarda el archivo original. Nunca pisa otro: el nombre ya llega libre (ver nombre_libre)."""
     b64 = base64.b64encode(contenido).decode() if contenido else ""
-    d = db()
-    # Reemplazo scopeado por empresa (equivale a un upsert por empresa_id+nombre).
-    d.execute("DELETE FROM archivos WHERE empresa_id=? AND nombre=?", (emp(), nombre))
-    d.execute("""INSERT INTO archivos(empresa_id,nombre,tipo,total_doc,contenido,mime,creado)
-        VALUES(?,?,?,?,?,?,?)""",
-        (emp(), nombre, tipo, total_doc, b64, mime, datetime.now().strftime("%d/%m/%Y %H:%M")))
+    db().execute("""INSERT INTO archivos(empresa_id,nombre,tipo,total_doc,contenido,mime,creado,huella)
+        VALUES(?,?,?,?,?,?,?,?)""",
+        (emp(), nombre, tipo, total_doc, b64, mime, datetime.now().strftime("%d/%m/%Y %H:%M"), huella))
+
+def huella_de(contenido):
+    return hashlib.sha256(contenido or b"").hexdigest()
+
+def _cantidad_registros(d, tipo, nombre):
+    """Cuantos movimientos (o gastos) quedaron ligados a ese archivo en esta empresa."""
+    if tipo == "Peajes":
+        sql = "SELECT COUNT(*) n FROM movimientos WHERE empresa_id=? AND archivo=?"
+    else:
+        sql = ("SELECT COUNT(*) n FROM gastos g JOIN resumenes r ON r.id=g.resumen_id "
+               "WHERE g.empresa_id=? AND r.archivo=?")
+    return d.execute(sql, (emp(), nombre)).fetchone()["n"]
+
+def buscar_duplicado(d, tipo, nombre, huella, total_doc, cantidad):
+    """Devuelve el archivo ya cargado en ESTA empresa con el mismo contenido (o None).
+    Archivos viejos sin huella: se considera el mismo si coinciden nombre + total + cantidad."""
+    E = emp()
+    filas = d.execute("""SELECT id,nombre,total_doc,huella,creado FROM archivos WHERE empresa_id=? AND tipo=?
+        AND (huella=? OR ((huella IS NULL OR huella='') AND nombre=?)) ORDER BY id""",
+        (E, tipo, huella, nombre)).fetchall()
+    for f in filas:
+        cant = _cantidad_registros(d, tipo, f["nombre"])
+        if cant == 0:   # quedo huerfano (se borraron sus registros): no cuenta, se limpia
+            d.execute("DELETE FROM archivos WHERE id=? AND empresa_id=?", (f["id"], E)); continue
+        if f["huella"] or (abs((f["total_doc"] or 0) - (total_doc or 0)) < 1 and cant == cantidad):
+            return f
+    return None
+
+def nombre_libre(d, nombre):
+    """Si ya hay otro archivo (de otro contenido) con ese nombre en la empresa, devuelve 'nombre (2).ext'."""
+    E = emp()
+    def ocupado(n):
+        return any(d.execute(f"SELECT 1 FROM {t} WHERE empresa_id=? AND {c}=? LIMIT 1", (E, n)).fetchone()
+                   for t, c in (("archivos", "nombre"), ("movimientos", "archivo"), ("resumenes", "archivo")))
+    if not ocupado(nombre):
+        return nombre
+    base, ext = os.path.splitext(nombre); i = 2
+    while ocupado(f"{base} ({i}){ext}"):
+        i += 1
+    return f"{base} ({i}){ext}"
+
+def aviso_duplicado(nombre, previo):
+    dia = (previo["creado"] or "")[:5]   # "DD/MM" de "DD/MM/AAAA HH:MM"
+    cuando = f" (el {dia})" if dia else ""
+    return f"«{nombre}» ya estaba cargado{cuando}. No se duplicó."
 
 # ================= AUTENTICACION =================
 def emp():
@@ -877,22 +921,37 @@ def procesar_peaje(arch, flota_map, flota_pat):
         r["mensaje"] = ("sin movimientos (si es un PDF escaneado, subi el Excel/CSV)"
                         if arch.filename.lower().endswith(".pdf") else "sin movimientos")
         return r
+    d = db()
+    huella = huella_de(contenido)
+    previo = buscar_duplicado(d, "Peajes", arch.filename, huella, total_doc, len(items))
+    if previo:
+        r["estado"] = "duplicado"; r["mensaje"] = aviso_duplicado(arch.filename, previo)
+        d.commit()   # cierra la lectura; si se limpio un archivo huerfano, queda guardado
+        return r
+    nombre = nombre_libre(d, arch.filename)
     nuevos, total = [], 0.0
     for it in items:   # por TAG (ultimos 8 digitos); sin TAG (Caminos de las Sierras) por patente
         m = flota_map.get(it["tag"]) if it["tag"] else flota_pat.get(norm_patente(it.get("patente")))
         nuevos.append((emp(), it["fecha"], it["tag"], (m["patente"] if m else it.get("patente", "")),
                        it["concepto"], it["monto"], (m["dueno"] if m else ""),
-                       (m["equipo"] if m else ""), 1 if m else 0, arch.filename, datetime.now().isoformat()))
+                       (m["equipo"] if m else ""), 1 if m else 0, nombre, datetime.now().isoformat()))
         total += it["monto"]
-    d = db()
-    d.executemany("""INSERT INTO movimientos(empresa_id,fecha,tag,patente,concepto,monto,
-        dueno,equipo,verificado,archivo,creado) VALUES(?,?,?,?,?,?,?,?,?,?,?)""", nuevos)
     mime = "application/pdf" if arch.filename.lower().endswith(".pdf") else "application/vnd.ms-excel"
-    guardar_archivo(arch.filename, "Peajes", total_doc, contenido, mime)
-    d.commit()
+    try:   # todo o nada por archivo: si algo falla, no queda ningun movimiento a medio cargar
+        d.executemany("""INSERT INTO movimientos(empresa_id,fecha,tag,patente,concepto,monto,
+            dueno,equipo,verificado,archivo,creado) VALUES(?,?,?,?,?,?,?,?,?,?,?)""", nuevos)
+        guardar_archivo(nombre, "Peajes", total_doc, contenido, mime, huella)
+        d.commit()
+    except Exception:
+        d.rollback()   # en PostgreSQL la transaccion fallida queda abortada hasta este rollback
+        app.logger.exception("importar: fallo al guardar %s", arch.filename)
+        r["mensaje"] = "no se pudo guardar el archivo. No se cargó nada de este archivo; probá de nuevo."
+        return r
     ok = sum(1 for n in nuevos if n[8])
     r["pasadas"] = len(nuevos)
     r["mensaje"] = f"{len(nuevos)} pasadas ({pesos(total)}), verificadas {ok}."
+    if nombre != arch.filename:
+        r["mensaje"] += f" Ya había otro archivo distinto con ese nombre: este se guardó como «{nombre}»."
     if not total_doc:
         r["estado"] = "sin_control"
     elif abs(total_doc - total) < 1:
@@ -915,11 +974,14 @@ def importar():
         flota_rows = d.execute("SELECT * FROM flota WHERE empresa_id=?", (emp(),)).fetchall()   # una sola vez
         flota_map = {f["tag"]: f for f in flota_rows}
         flota_pat = {norm_patente(f["patente"]): f for f in flota_rows if f["patente"]}
-        iconos = {"ok": "✔", "sin_control": "✔", "diferencia": "⚠", "error": "✖"}
+        iconos = {"ok": "✔", "sin_control": "✔", "diferencia": "⚠", "duplicado": "⚠", "error": "✖"}
         for a in archivos:   # si un archivo falla, los demas igual se procesan
             r = procesar_peaje(a, flota_map, flota_pat)
             emisor = f" [{r['emisor']}]" if r["emisor"] else ""
-            flash(f"{iconos[r['estado']]} {r['archivo']}{emisor}: {r['mensaje']}")
+            if r["estado"] == "duplicado":   # el aviso ya trae el nombre del archivo
+                flash(f"{iconos['duplicado']} {r['mensaje']}")
+            else:
+                flash(f"{iconos[r['estado']]} {r['archivo']}{emisor}: {r['mensaje']}")
         if omitidos:
             flash(f"⚠ Se procesaron los primeros {MAX_ARCHIVOS_CARGA} archivos; quedaron sin procesar {len(omitidos)}.")
         return redirect("/importar")
@@ -1044,7 +1106,7 @@ def flota_borrar(fid):
 
 # ================= 3) GASTOS TARJETAS =================
 def procesar_resumen(arch):
-    """Procesa UN resumen de tarjeta. Devuelve (ok, mensaje); nunca corta la carga de los demas."""
+    """Procesa UN resumen de tarjeta. Devuelve (ok, mensaje): ok True/False, o None si ya estaba cargado."""
     d = db()
     try:
         contenido = arch.read()
@@ -1069,19 +1131,31 @@ def procesar_resumen(arch):
         if not items:
             raise ValueError("El PDF parece escaneado o ilegible; subí el Excel/CSV del resumen."
                              if arch.filename.lower().endswith(".pdf") else "no se encontraron consumos en el resumen.")
+        huella = huella_de(contenido)
+        previo = buscar_duplicado(d, "Resumen tarjeta", arch.filename, huella, meta["total"], len(items))
+        if previo:
+            d.commit()   # cierra la lectura; deja guardada la limpieza de un archivo huerfano
+            return None, aviso_duplicado(arch.filename, previo)
+        nombre = nombre_libre(d, arch.filename)
+        mime = "application/pdf" if arch.filename.lower().endswith(".pdf") else "application/vnd.ms-excel"
+    except Exception as e:
+        d.rollback()
+        return False, f"{arch.filename}: {e}"
+    try:   # todo o nada por archivo
         cur = d.execute("""INSERT INTO resumenes(empresa_id,archivo,banco,titular,periodo,vencimiento,total_resumen,creado)
-            VALUES(?,?,?,?,?,?,?,?) RETURNING id""", (emp(), arch.filename, meta["banco"], meta["titular"], meta["periodo"],
+            VALUES(?,?,?,?,?,?,?,?) RETURNING id""", (emp(), nombre, meta["banco"], meta["titular"], meta["periodo"],
             meta["vencimiento"], meta["total"], datetime.now().isoformat()))
         rid = cur.fetchone()["id"]
         d.executemany("INSERT INTO gastos(empresa_id,resumen_id,fecha,concepto,categoria,monto) VALUES(?,?,?,?,?,?)",
                       [(emp(), rid, i["fecha"], i["concepto"], i["categoria"], i["monto"]) for i in items])
-        mime = "application/pdf" if arch.filename.lower().endswith(".pdf") else "application/vnd.ms-excel"
-        guardar_archivo(arch.filename, "Resumen tarjeta", meta["total"], contenido, mime)
+        guardar_archivo(nombre, "Resumen tarjeta", meta["total"], contenido, mime, huella)
         d.commit()
-        return True, f"{arch.filename}: resumen {meta['banco']} procesado, {len(items)} consumos, total {pesos(meta['total'])}."
-    except Exception as e:
-        d.rollback()
-        return False, f"{arch.filename}: {e}"
+    except Exception:
+        d.rollback()   # en PostgreSQL la transaccion fallida queda abortada hasta este rollback
+        app.logger.exception("gastos: fallo al guardar %s", arch.filename)
+        return False, f"{arch.filename}: no se pudo guardar. No se cargó nada de este archivo; probá de nuevo."
+    extra = f" Ya había otro archivo distinto con ese nombre: este se guardó como «{nombre}»." if nombre != arch.filename else ""
+    return True, f"{arch.filename}: resumen {meta['banco']} procesado, {len(items)} consumos, total {pesos(meta['total'])}.{extra}"
 
 @app.route("/gastos", methods=["GET", "POST"])
 def gastos():
@@ -1093,7 +1167,7 @@ def gastos():
             return redirect("/gastos")
         for a in archivos[:MAX_ARCHIVOS_CARGA]:
             ok, msg = procesar_resumen(a)
-            flash(("✔ " if ok else "✖ ") + msg)
+            flash(("✔ " if ok else "⚠ " if ok is None else "✖ ") + msg)
         if len(archivos) > MAX_ARCHIVOS_CARGA:
             flash(f"⚠ Se procesaron los primeros {MAX_ARCHIVOS_CARGA} archivos; quedaron sin procesar {len(archivos) - MAX_ARCHIVOS_CARGA}.")
         return redirect("/gastos")
