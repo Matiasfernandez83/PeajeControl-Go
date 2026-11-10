@@ -1,0 +1,29 @@
+# Mantiene despierta la app en Render (plan gratis).
+# Render duerme el servicio tras 15 minutos sin visitas; este workflow le hace
+# un GET cada 5 minutos para que siempre responda rapido.
+name: Mantener despierta
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+env:
+  # Direccion que se visita. Cuando se conecte el dominio propio,
+  # cambiala por https://peajecontrol.com.ar/salud
+  APP_URL: https://tags-furlong.onrender.com/salud
+
+permissions: {}
+
+concurrency:
+  group: mantener-despierta
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      # max-time 90: si la app estaba dormida tarda ~1 minuto en despertar
+      - name: Visitar la app
+        run: curl -fsS --retry 3 --retry-delay 10 --max-time 90 -o /dev/null -w '%{http_code}\n' "$APP_URL"

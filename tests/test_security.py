@@ -48,6 +48,11 @@ def test_rutas_exigen_login():
         r = c.get(ruta)
         assert r.status_code == 302 and "/login" in r.headers["Location"], f"{ruta} sin login: {r.status_code}"
 
+def test_salud_sin_login():
+    r = cliente().get("/salud")
+    assert r.status_code == 200 and r.get_data(as_text=True) == "ok"
+    assert "Set-Cookie" not in r.headers
+
 def test_headers_seguridad():
     r = cliente().get("/login")
     h = r.headers

@@ -696,8 +696,13 @@ def emp():
 
 @app.before_request
 def requiere_login():
-    if request.endpoint not in ("login", "static", "landing") and not session.get("uid"):
+    if request.endpoint not in ("login", "static", "landing", "salud") and not session.get("uid"):
         return redirect("/login")
+
+@app.route("/salud")
+def salud():
+    """Ping liviano para mantener despierta la app en Render (sin base de datos ni sesion)."""
+    return "ok", 200, {"Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store"}
 
 @app.route("/landing")
 def landing():
