@@ -43,7 +43,7 @@ def _skip(motivo):
 
 def test_rutas_exigen_login():
     c = cliente()
-    for ruta in ["/", "/movimientos", "/importar", "/flota", "/gastos", "/reportes", "/config",
+    for ruta in ["/movimientos", "/importar", "/flota", "/gastos", "/reportes", "/config",
                  "/empresas", "/exportar", "/gastos/exportar", "/ver/monto", "/archivo/1", "/factura/x.pdf"]:
         r = c.get(ruta)
         assert r.status_code == 302 and "/login" in r.headers["Location"], f"{ruta} sin login: {r.status_code}"
@@ -141,18 +141,58 @@ def test_estaticos_versionados_y_cache():
     csp = c.get("/login").headers["Content-Security-Policy"]
     assert "googleapis" not in csp and "gstatic" not in csp and "font-src 'self'" in csp
 
-def test_contacto_landing_desde_config():
+def _sin_contacto():
+    for k in ("CONTACTO_EMAIL", "CONTACTO_WHATSAPP"): os.environ.pop(k, None)
+
+def test_raiz_sin_sesion_muestra_landing_y_con_sesion_el_tablero():
     c = cliente()
-    h = c.get("/landing").get_data(as_text=True)
-    assert "mailto:tuemail@peajecontrol.com" in h and "https://wa.me/5491100000000" in h
+    r = c.get("/")
+    h = r.get_data(as_text=True)
+    assert r.status_code == 200 and "Dejá de conciliar peajes" in h and 'href="/login"' in h
+    assert '<link rel="canonical" href="https://peajecontrol.com.ar/">' in h
+    assert 'property="og:title"' in h and 'property="og:description"' in h and 'property="og:url" content="https://peajecontrol.com.ar/"' in h
+    assert c.get("/landing").status_code == 200   # sigue funcionando
+    c = logueado()
+    h = c.get("/").get_data(as_text=True)
+    assert "Dejá de conciliar peajes" not in h and "Iniciar sesión" not in h and "kpi" in h.lower()
+
+def test_login_enlaza_a_la_landing():
+    h = cliente().get("/login").get_data(as_text=True)
+    assert 'href="/landing"' in h and "Conocé PeajeControl Go" in h
+
+def test_landing_sin_promesas_falsas():
+    h = cliente().get("/").get_data(as_text=True)
+    for malo in ("Telepase", "100% local", "ningún error", "resumen bancario"):
+        assert malo not in h, f"la landing todavia dice: {malo}"
+    for emisor in ("AUSA", "AUSOL", "AUBASA", "Autovía del Mercosur", "GCO", "CEAMSE", "Caminos de las Sierras", "AP01 Santa Fe"):
+        assert emisor in h
+
+def test_contacto_landing_desde_config():
+    c = cliente(); _sin_contacto()
+    h = c.get("/").get_data(as_text=True)
+    # sin configurar: nada de datos de relleno, solo el camino al login
+    for relleno in ("tuemail@peajecontrol.com", "0000-0000", "mailto:", "wa.me", "Pedí una demo"):
+        assert relleno not in h, f"se filtro el relleno: {relleno}"
+    assert 'id="contacto"' in h and 'href="/login"' in h
     os.environ["CONTACTO_EMAIL"] = "ventas@ejemplo.com"; os.environ["CONTACTO_WHATSAPP"] = "+54 9 11 5555-1234"
     try:
-        h = c.get("/landing").get_data(as_text=True)
+        h = c.get("/").get_data(as_text=True)
         assert "mailto:ventas@ejemplo.com" in h and "ventas@ejemplo.com</a>" in h
         assert "https://wa.me/5491155551234" in h and "+54 9 11 5555-1234" in h
         assert "tuemail@peajecontrol.com" not in h
+        del os.environ["CONTACTO_WHATSAPP"]   # solo mail: no aparece el telefono
+        h = c.get("/").get_data(as_text=True)
+        assert "mailto:ventas@ejemplo.com" in h and "wa.me" not in h
     finally:
-        del os.environ["CONTACTO_EMAIL"]; del os.environ["CONTACTO_WHATSAPP"]
+        _sin_contacto()
+
+def test_mensaje_de_tamano_sale_del_tope_real():
+    tope = app.config["MAX_CONTENT_LENGTH"]
+    c = logueado()
+    r = c.post("/importar", data={"_csrf": token(c, "/importar"), "archivo": (io.BytesIO(b"x" * (tope + 1024)), "enorme.xlsx")},
+               content_type="multipart/form-data")
+    h = r.get_data(as_text=True)
+    assert r.status_code == 413 and f"({tope // (1024 * 1024)} MB" in h and "25 MB" not in h
 
 def test_no_sqli():
     c = logueado()
@@ -241,7 +281,7 @@ def test_flujo_completo_y_export_sin_formulas():
     assert re.search(r'class="dato">0</span>', c.get("/ver/monto").get_data(as_text=True))
     # salir
     assert c.get("/salir").status_code == 302
-    assert c.get("/").status_code == 302
+    assert c.get("/movimientos").status_code == 302   # sin sesion no entra a la app (la raiz muestra la landing)
 
 def test_plantilla_flota():
     c = logueado()

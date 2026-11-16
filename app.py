@@ -70,20 +70,19 @@ def cache_estaticos(resp):
     return resp
 
 # Contacto de la landing: UN solo lugar. Se cambia con las variables CONTACTO_EMAIL y CONTACTO_WHATSAPP
-# (en Render: Environment). Si faltan o estan vacias, se usan estos datos de ejemplo.
-CONTACTO_EMAIL_DEFAULT = "tuemail@peajecontrol.com"
-CONTACTO_WHATSAPP_DEFAULT = "+54 9 11 0000-0000"
-
+# (en Render: Environment). Si faltan o estan vacias, la landing NO muestra ese dato (nunca datos de relleno).
 def datos_contacto():
-    email = (os.environ.get("CONTACTO_EMAIL") or "").strip() or CONTACTO_EMAIL_DEFAULT
-    whatsapp = (os.environ.get("CONTACTO_WHATSAPP") or "").strip() or CONTACTO_WHATSAPP_DEFAULT
+    email = (os.environ.get("CONTACTO_EMAIL") or "").strip()
+    whatsapp = (os.environ.get("CONTACTO_WHATSAPP") or "").strip()
+    digitos = re.sub(r"[^0-9]", "", whatsapp)   # wa.me pide solo digitos, con codigo de pais y sin +
+    if not digitos: whatsapp = ""
     asunto = "Quiero una demo de PeajeControl Go"
     return {
         "email": email,
         "whatsapp": whatsapp,
-        "mailto": f"mailto:{email}?subject={quote(asunto)}",
-        # wa.me pide solo digitos, con codigo de pais y sin +
-        "whatsapp_url": f"https://wa.me/{re.sub(r'[^0-9]', '', whatsapp)}?text={quote(asunto)}",
+        "mailto": f"mailto:{email}?subject={quote(asunto)}" if email else "",
+        "whatsapp_url": f"https://wa.me/{digitos}?text={quote(asunto)}" if whatsapp else "",
+        "hay": bool(email or whatsapp),
     }
 
 @app.context_processor
@@ -766,7 +765,8 @@ def emp():
 
 @app.before_request
 def requiere_login():
-    if request.endpoint not in ("login", "static", "landing", "demo_entrar") and not session.get("uid"):
+    # "dashboard" es la raiz "/": sin sesion muestra la landing (ver dashboard()); con sesion, el tablero.
+    if request.endpoint not in ("login", "static", "landing", "dashboard", "demo_entrar") and not session.get("uid"):
         return redirect("/login")
 
 @app.route("/landing")
@@ -817,7 +817,8 @@ def demo_entrar():
 
 @app.errorhandler(413)
 def archivo_muy_grande(_):
-    return "El archivo supera el limite permitido (25 MB). Dividilo o comprimilo.", 413
+    mb = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
+    return f"Lo que subiste supera el limite permitido ({mb} MB por envio). Dividilo en partes o comprimilo.", 413
 
 def xl(v):
     """Anti inyeccion de formulas: un texto que empieza con = + - @ (o control) se prefija con comilla."""
@@ -828,6 +829,8 @@ def xl(v):
 # ================= 1) TABLERO =================
 @app.route("/")
 def dashboard():
+    if not session.get("uid"):   # visita sin sesion: se ve la landing (en la misma direccion, para compartir el link)
+        return render_template("landing.html")
     d = db(); E = emp()
     kpi = d.execute("""SELECT COUNT(*) n, COALESCE(SUM(monto),0) total,
         COUNT(DISTINCT NULLIF(patente,'')) patentes, COUNT(DISTINCT NULLIF(dueno,'')) duenos,
