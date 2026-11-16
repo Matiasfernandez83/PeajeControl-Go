@@ -13,7 +13,13 @@ document.documentElement.setAttribute('data-theme',t);})();</script>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tema.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
-<body>
+<body{% if es_demo %} class="demo"{% endif %}>
+{% if es_demo %}
+<div class="franja-demo" role="status">
+  <span class="franja-txt"><svg class="i"><use href="#i-alerta"/></svg>Estás en una demo con datos ficticios</span>
+  <a class="btn chico" href="/landing#contacto">Pedir mi prueba</a>
+</div>
+{% endif %}
 <canvas id="fondo-red" aria-hidden="true"></canvas>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
   <symbol id="i-tablero" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></symbol>
@@ -90,8 +96,10 @@ document.documentElement.setAttribute('data-theme',t);})();</script>
     <a class="item {{ 'act' if request.path=='/importar' or request.path=='/flota' }}" href="/importar"><svg class="i"><use href="#i-subir"/></svg><span class="txt">Importar</span></a>
     <a class="item {{ 'act' if request.path=='/gastos' }}" href="/gastos"><svg class="i"><use href="#i-tarjeta"/></svg><span class="txt">Gastos tarjetas</span></a>
     <a class="item {{ 'act' if request.path=='/reportes' }}" href="/reportes"><svg class="i"><use href="#i-reportes"/></svg><span class="txt">Reportes</span></a>
+    {% if not es_demo %}
     <div class="grupo">Cuenta</div>
     <a class="item {{ 'act' if request.path=='/config' }}" href="/config"><svg class="i"><use href="#i-ajustes"/></svg><span class="txt">Configuración</span></a>
+    {% endif %}
     {% if session.rol == 'superadmin' %}
     <a class="item {{ 'act' if request.path=='/empresas' }}" href="/empresas"><svg class="i"><use href="#i-empresa"/></svg><span class="txt">Empresas</span></a>
     {% endif %}

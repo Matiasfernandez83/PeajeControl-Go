@@ -11,6 +11,7 @@ sys.path.insert(0, RAIZ)
 PG_URL = os.environ.get("TEST_DATABASE_URL")
 os.environ.pop("DATABASE_URL", None)
 os.environ.update(ADMIN_PASSWORD="clave-de-test-123", SECRET_KEY="secret-de-test")
+os.environ.setdefault("DEMO_AUTO", "0")   # los tests siembran la demo a mano (sembrar_demo) cuando la necesitan
 TMP = tempfile.mkdtemp()
 os.environ["DB_PATH"] = os.path.join(TMP, "test.db")
 

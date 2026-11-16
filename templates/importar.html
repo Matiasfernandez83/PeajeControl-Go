@@ -3,6 +3,15 @@
 {% block cuerpo %}
 <h1>Importar datos</h1>
 <div class="dos asim">
+  {% if es_demo %}
+  <div class="tarjeta">
+    <h3>Así quedan tus facturas ya procesadas</h3>
+    <p class="mini" style="margin-top:6px">En la demo no se suben archivos: abajo ves 9 facturas de ejemplo (AUSA, AUSOL y AUBASA) ya leídas.
+    Cada pase se cruza contra la flota por los últimos 8 dígitos del TAG y la suma se compara con el total del documento (semáforo de control).
+    Fijate la factura que <b>difiere</b> y los pases <b>sin control</b>.</p>
+    <a class="btn" href="/landing#contacto">Quiero probarlo con mis facturas</a>
+  </div>
+  {% else %}
   <div class="tarjeta">
     <h3>Carga de documentos</h3>
     <p class="mini" style="margin-top:6px">Subí facturas de peajes en <b>PDF</b> (AUSA, AUSOL, TelePASE) o el detalle en Excel/CSV.
@@ -19,11 +28,12 @@
     </form>
     <div class="cartel-info" role="note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 11v5M12 7.5v.01"/></svg><span>Formatos aceptados: PDF legibles (facturas) · Excel o CSV (resúmenes de tarjeta). No se aceptan imágenes ni PDF escaneados.</span></div>
   </div>
+  {% endif %}
   <div class="tarjeta oscura">
     <div class="ic-box ac-azul"><svg class="i"><use href="#i-base"/></svg></div>
     <h3 style="margin-top:12px">Base maestra</h3>
     <div class="stat-grande">{{ flota_n }} <small>camiones</small></div>
-    <a class="btn blanco completo" href="/flota">Actualizar flota</a>
+    <a class="btn blanco completo" href="/flota">{{ 'Ver flota' if es_demo else 'Actualizar flota' }}</a>
   </div>
 </div>
 
@@ -31,7 +41,7 @@
   <h3 style="margin-bottom:16px">Archivos importados</h3>
   <div class="tabla-wrap">
   <table>
-    <tr><th>Archivo</th><th class="num">Movs.</th><th class="num">Suma extraída</th><th class="num ocultar-mov">Total doc.</th><th>Control</th><th></th></tr>
+    <tr><th>Archivo</th><th class="num">Movs.</th><th class="num">Suma extraída</th><th class="num ocultar-mov">Total doc.</th><th>Control</th>{% if not es_demo %}<th></th>{% endif %}</tr>
     {% for a in archivos %}
     <tr>
       <td>{{ a.archivo }}</td>
@@ -39,14 +49,14 @@
       <td class="num">{{ a.t|pesos }}</td>
       <td class="num ocultar-mov">{% if a.td %}{{ a.td|pesos }}{% else %}—{% endif %}</td>
       <td>{% if not a.td %}<span class="pill sin">Sin control</span>{% elif (a.td - a.t)|abs < 1 %}<span class="pill ok">OK</span>{% else %}<span class="pill aviso">Difiere {{ (a.td - a.t)|abs|pesos }}</span>{% endif %}</td>
-      <td class="num">
+      {% if not es_demo %}<td class="num">
         <form method="post" action="/movimientos/borrar" onsubmit="return confirm('¿Eliminar los movimientos de este archivo?')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
           <input type="hidden" name="archivo" value="{{ a.archivo }}">
           <button class="btn chico gh" type="submit"><svg class="i"><use href="#i-papelera"/></svg>Eliminar</button>
         </form>
-      </td>
+      </td>{% endif %}
     </tr>
-    {% else %}<tr><td colspan="6" class="td-vacio">{{ vacio('archivo', 'Todavía no importaste archivos', 'Subí tu primera factura con el cuadro de arriba.') }}</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="{{ 5 if es_demo else 6 }}" class="td-vacio">{{ vacio('archivo', 'Todavía no importaste archivos', 'Subí tu primera factura con el cuadro de arriba.') }}</td></tr>{% endfor %}
   </table>
   </div>
 </div>
