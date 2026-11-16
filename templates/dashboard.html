@@ -3,7 +3,7 @@
 {% from "_paginado.html" import origen %}
 {% block cuerpo %}
 <h1>Dashboard</h1>
-<p class="sub">Tocá «Abrir» en una tarjeta (o doble click en la compu) para ver el detalle completo en otra pestaña.</p>
+<p class="sub">Tocá «Abrir» en una tarjeta para ver el detalle.</p>
 
 <div class="kpis">
   <div class="kpi" ondblclick="abrirPestana('monto')" title="Doble click o botón Abrir: detalle en otra pestaña">
@@ -35,7 +35,7 @@
     {% for r in top %}
     <a class="barra" href="/movimientos?dueno={{ r.dueno|urlencode }}" title="{{ r.n }} operaciones">
       <span class="nombre">{{ r.dueno }}</span>
-      <div class="relleno" style="width:{{ (r.t / maximo * 100)|round(1) }}%"></div>
+      <span class="pista"><span class="relleno" style="width:{{ (r.t / maximo * 100)|round(1) if maximo else 0 }}%"></span></span>
       <span class="valor">{{ r.t|pesos }}</span>
     </a>
     {% else %}{{ vacio('bandeja', 'Todavía no hay datos', 'Importá un PDF de peajes para empezar.') }}{% endfor %}
@@ -47,7 +47,7 @@
     {% for r in dist %}
     <a class="barra" href="/ver/{{ 'sinmatch' if 'Sin' in r.k else 'verificados' }}" target="_blank" rel="noopener" title="Abrir el detalle en otra pestaña">
       <span class="nombre">{{ r.k }}</span>
-      <div class="relleno {{ 'gris' if 'Sin' in r.k else 'azul' }}" style="width:{{ (r.n / kpi.n * 100)|round(1) if kpi.n else 0 }}%"></div>
+      <span class="pista"><span class="relleno {{ 'gris' if 'Sin' in r.k else 'azul' }}" style="width:{{ (r.n / kpi.n * 100)|round(1) if kpi.n else 0 }}%"></span></span>
       <span class="valor">{{ r.n }} · {{ r.t|pesos }}</span>
     </a>
     {% else %}{{ vacio('bandeja', 'Sin datos') }}{% endfor %}
