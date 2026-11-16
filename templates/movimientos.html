@@ -44,28 +44,28 @@
       <div><span class="dato" style="color:var(--rojo)">{{ resumen.t|pesos }}</span> <span class="mini" style="margin:0">total del filtro</span></div>
     </div>
   </div>
-  <form method="post" action="/movimientos/borrar" onsubmit="return confirm('¿Eliminar los movimientos seleccionados?')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  {% if not es_demo %}<form method="post" action="/movimientos/borrar" onsubmit="return confirm('¿Eliminar los movimientos seleccionados?')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">{% endif %}
   <div class="tabla-wrap">
   <table>
     <tr>
-      <th style="width:30px"><input type="checkbox" aria-label="Seleccionar todos" onclick="document.querySelectorAll('.chk').forEach(c=>c.checked=this.checked)"></th>
+      {% if not es_demo %}<th style="width:30px"><input type="checkbox" aria-label="Seleccionar todos" onclick="document.querySelectorAll('.chk').forEach(c=>c.checked=this.checked)"></th>{% endif %}
       <th>Fecha</th><th>Patente</th><th class="ocultar-mov">Equipo</th><th>Responsable</th><th>TAG</th><th>Control</th><th>Factura/Origen</th><th class="num">Monto</th>
     </tr>
     {% for m in movs %}
     <tr{% if m.archivo_id %} data-abrir="/archivo/{{ m.archivo_id }}" title="Doble click para ver la factura"{% endif %}>
-      <td><input type="checkbox" class="chk" name="ids" value="{{ m.id }}"></td>
+      {% if not es_demo %}<td><input type="checkbox" class="chk" name="ids" value="{{ m.id }}"></td>{% endif %}
       <td>{{ m.fecha }}</td><td class="mono">{{ m.patente }}</td><td class="ocultar-mov">{{ m.equipo }}</td>
       <td>{{ m.dueno }}</td><td class="mono">{{ m.tag }}</td>
       <td><span class="pill {{ 'ok' if m.verificado else 'sin' }}">{{ 'Verificado' if m.verificado else 'Sin control' }}</span></td>
       <td>{{ origen(m) }}</td>
       <td class="num">{{ m.monto|pesos }}</td>
     </tr>
-    {% else %}<tr><td colspan="9" class="td-vacio">{{ vacio('buscar', 'Sin resultados', 'Probá con otra búsqueda o quitá los filtros.') }}</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="{{ 8 if es_demo else 9 }}" class="td-vacio">{{ vacio('buscar', 'Sin resultados', 'Probá con otra búsqueda o quitá los filtros.') }}</td></tr>{% endfor %}
   </table>
   </div>
   {{ paginado(pagina, paginas) }}
-  {% if movs %}<button class="btn chico gh" type="submit" style="margin-top:16px"><svg class="i"><use href="#i-papelera"/></svg>Eliminar seleccionados</button>{% endif %}
-  </form>
+  {% if movs and not es_demo %}<button class="btn chico gh" type="submit" style="margin-top:16px"><svg class="i"><use href="#i-papelera"/></svg>Eliminar seleccionados</button>{% endif %}
+  {% if not es_demo %}</form>{% endif %}
   <p class="mini" style="margin-top:12px;margin-bottom:0">Se muestran {{ por_pagina }} registros por página. Usá el buscador o exportá a Excel para el total.</p>
 </div>
 {% endif %}

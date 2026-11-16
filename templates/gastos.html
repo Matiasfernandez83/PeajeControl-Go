@@ -18,7 +18,7 @@
 </div>
 
 <div class="billetera">
-  <div class="carga">
+  {% if not es_demo %}<div class="carga">
     <form method="post" enctype="multipart/form-data"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <div class="tarjeta drop compacta" style="margin:0">
         <div class="ic-box ac-azul" style="margin:0 auto 12px"><svg class="i"><use href="#i-tarjeta"/></svg></div>
@@ -29,7 +29,7 @@
       </div>
     </form>
     <div class="cartel-info" role="note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 11v5M12 7.5v.01"/></svg><span>Formatos aceptados: PDF legibles (facturas) · Excel o CSV (resúmenes de tarjeta). No se aceptan imágenes ni PDF escaneados.</span></div>
-  </div>
+  </div>{% endif %}
   <div class="lista">
     <div class="fila">
       {% for s in resumenes %}
@@ -40,9 +40,9 @@
             <div class="banco">{{ s.banco }}</div>
             <div class="titular">{{ s.titular or 'Sin titular' }}</div>
           </div>
-          <form method="post" action="/gastos/borrar/{{ s.id }}" style="margin-left:auto" onsubmit="return confirm('¿Eliminar este resumen?')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          {% if not es_demo %}<form method="post" action="/gastos/borrar/{{ s.id }}" style="margin-left:auto" onsubmit="return confirm('¿Eliminar este resumen?')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
             <button class="btn-icono" type="submit" title="Eliminar resumen" aria-label="Eliminar resumen"><svg class="i"><use href="#i-papelera"/></svg></button>
-          </form>
+          </form>{% endif %}
         </div>
         <div class="etiqueta">Total a pagar</div>
         <div class="total">{{ s.total_resumen|pesos }}</div>

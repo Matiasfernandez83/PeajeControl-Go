@@ -1,9 +1,10 @@
 # PeajeControl Go - Flask + pdfplumber. BD: SQLite (dev) o PostgreSQL (prod, via DATABASE_URL). Sin IA, sin API keys.
-import csv, hashlib, io, os, re, sqlite3, base64, secrets, hmac, time, unicodedata
+import csv, hashlib, io, os, re, sqlite3, sys, base64, secrets, hmac, time, unicodedata
 from collections import defaultdict
 from datetime import datetime, timedelta
-from urllib.parse import quote
-from flask import Flask, g, request, redirect, session, render_template, send_file, url_for, flash, jsonify, abort
+from urllib.parse import quote, urlparse
+from flask import (Flask, g, request, redirect, session, render_template, send_file, url_for, flash, jsonify,
+                   abort, has_request_context)
 from werkzeug.security import generate_password_hash, check_password_hash
 from openpyxl import load_workbook, Workbook
 
@@ -88,6 +89,62 @@ def datos_contacto():
 def inyectar_contacto():
     return {"contacto": datos_contacto()}
 
+# ================= MODO DEMO (solo lectura) =================
+# La demo entra por /demo, sin registrarse, a la empresa de ejemplo (empresas.demo=1). Es una sesion con rol "demo".
+# Seguridad: (1) LISTA BLANCA: en modo demo solo pasan las rutas de DEMO_PERMITIDAS y solo con GET/HEAD; todo lo demas
+# (incluidas rutas que se agreguen en el futuro) se bloquea por defecto. (2) la base se abre en solo lectura. (3) vence a los 30 min.
+DEMO_DURACION = 30 * 60
+DEMO_AVISO = "En la demo no se modifica nada. ¿Querés probarlo con tus facturas?"
+DEMO_PERMITIDAS = frozenset({
+    "dashboard", "ver", "ver_archivo", "ver_factura", "movimientos", "importar", "flota", "gastos", "reportes",
+    "descargar_archivo", "exportar", "exportar_gastos", "static", "landing", "salir", "demo_entrar"})
+DEMO_LIMITES = {"entrada": (20, 3600), "excel": (5, 3600)}   # ingresos a /demo y exportaciones Excel: maximo por hora y por IP
+USOS_DEMO = defaultdict(list)                                  # (tipo, ip) -> instantes de uso (en memoria, como INTENTOS)
+
+def _ip_cliente():
+    # Render agrega la IP real al FINAL de X-Forwarded-For: el ultimo valor es el confiable.
+    return request.headers.get("X-Forwarded-For", "").split(",")[-1].strip() or request.remote_addr
+
+def demo_excedido(tipo):
+    """Cuenta un uso de `tipo` para la IP del visitante. True si ya se pasó del maximo por hora (y no lo cuenta)."""
+    maximo, ventana = DEMO_LIMITES[tipo]
+    clave, ahora = (tipo, str(_ip_cliente())), time.time()
+    usos = [t for t in USOS_DEMO[clave] if ahora - t < ventana]
+    if len(usos) >= maximo:
+        USOS_DEMO[clave] = usos; return True
+    usos.append(ahora); USOS_DEMO[clave] = usos
+    if len(USOS_DEMO) > 5000:   # que la memoria no crezca sin tope
+        for k in [k for k, v in USOS_DEMO.items() if not v or ahora - v[-1] >= ventana]: USOS_DEMO.pop(k, None)
+    return False
+
+def _volver_demo():
+    """A donde volver tras un bloqueo en un POST: la pagina de la que venia (si es de esta misma app) o el tablero."""
+    ref = urlparse(request.referrer or "")
+    if ref.netloc == request.host and ref.path.startswith("/") and not ref.path.startswith("//"):
+        return ref.path + (("?" + ref.query) if ref.query else "")
+    return "/"
+
+@app.before_request
+def modo_demo():
+    if session.get("rol") != "demo":
+        return None   # usuarios normales: esto no los toca
+    if time.time() > session.get("demo_hasta", 0):
+        session.clear()
+        flash("La demo terminó (dura 30 minutos). ¿Querés probarlo con tus facturas?")
+        return redirect("/")
+    ep = request.endpoint
+    if request.method in ("GET", "HEAD") and ep in DEMO_PERMITIDAS:
+        if ep in ("exportar", "exportar_gastos") and demo_excedido("excel"):
+            flash("Llegaste al máximo de exportaciones de la demo (5 por hora).")
+            return redirect(_volver_demo(), 303)
+        return None
+    flash(DEMO_AVISO)
+    return redirect("/" if request.method in ("GET", "HEAD") else _volver_demo(), 303)
+
+@app.context_processor
+def inyectar_demo():
+    return {"es_demo": session.get("rol") == "demo"}
+
 def csrf_token():
     if "_csrf" not in session:
         session["_csrf"] = secrets.token_hex(16)
@@ -108,8 +165,7 @@ INTENTOS = defaultdict(list)  # clave (email o IP) -> instantes de logins fallid
 MAX_INTENTOS, VENTANA = 5, 300  # 5 fallos cada 5 minutos
 
 def _claves_login(email):
-    ip = request.headers.get("X-Forwarded-For", "").split(",")[-1].strip() or request.remote_addr
-    return ["e:" + email, "i:" + str(ip)]
+    return ["e:" + email, "i:" + str(_ip_cliente())]
 
 def _bloqueado(claves):
     ahora = time.time()
@@ -153,6 +209,7 @@ if USE_PG:
         def __init__(self):
             self._conn = _get_pool().getconn()
             self._bad = False
+            self._ro = False
         @staticmethod
         def _sql(sql):
             # psycopg2 usa % como marca de parametro: un % literal escrito a mano (ej. LIKE '%x%')
@@ -181,8 +238,15 @@ if USE_PG:
         def rollback(self):
             try: self._conn.rollback()
             except Exception: self._bad = True
+        def solo_lectura(self):
+            # Toda transaccion de esta conexion sera READ ONLY: la base rechaza cualquier escritura (modo demo).
+            self._conn.rollback()   # set_session no se puede usar dentro de una transaccion
+            self._conn.set_session(readonly=True); self._ro = True
         def close(self):
             # Devuelve la conexion al pool (o la descarta si quedo en mal estado).
+            if self._ro:   # la conexion vuelve al pool: que no quede en solo lectura para el proximo request
+                try: self._conn.rollback(); self._conn.set_session(readonly=False)
+                except Exception: self._bad = True
             try: _get_pool().putconn(self._conn, close=self._bad)
             except Exception:
                 try: self._conn.close()
@@ -202,6 +266,9 @@ def _conectar():
 def db():
     if "db" not in g:
         g.db = _conectar()
+        if has_request_context() and session.get("rol") == "demo":   # 2da barrera del modo demo: la base no deja escribir
+            if USE_PG: g.db.solo_lectura()
+            else: g.db.execute("PRAGMA query_only=ON")
     return g.db
 
 @app.teardown_appcontext
@@ -216,7 +283,7 @@ def _esquema():
     pk = "SERIAL PRIMARY KEY" if USE_PG else "INTEGER PRIMARY KEY"
     real = "DOUBLE PRECISION" if USE_PG else "REAL"
     return f"""
-    CREATE TABLE IF NOT EXISTS empresas(id {pk}, nombre TEXT, creado TEXT);
+    CREATE TABLE IF NOT EXISTS empresas(id {pk}, nombre TEXT, creado TEXT, demo INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS usuarios(id {pk}, empresa_id INTEGER, email TEXT UNIQUE,
         clave TEXT, nombre TEXT, rol TEXT DEFAULT 'operador');
     CREATE TABLE IF NOT EXISTS flota(id {pk}, empresa_id INTEGER, tag TEXT, patente TEXT,
@@ -265,6 +332,7 @@ def _fix_archivos_unique(con):
 def _columnas_esperadas():
     real = "DOUBLE PRECISION" if USE_PG else "REAL"
     return {
+        "empresas": [("demo", "INTEGER DEFAULT 0")],   # 1 = empresa de ejemplo de la demo online
         "usuarios": [("clave", "TEXT"), ("nombre", "TEXT"), ("rol", "TEXT DEFAULT 'operador'")],
         "flota": [("tag", "TEXT"), ("patente", "TEXT"), ("dueno", "TEXT"), ("equipo", "TEXT"),
                   ("estado", "TEXT"), ("marca", "TEXT")],
@@ -286,6 +354,8 @@ def _agregar_columnas(con):
             existentes = _columnas(con, tabla)
         except Exception as e:
             print(f"migrar: no se pudo leer columnas de {tabla}: {e}"); continue
+        if not existentes:   # la tabla todavia no existe (se crea con _esquema): no hay nada que completar
+            continue
         for col, tipo in cols:
             if col in existentes:
                 continue
@@ -323,7 +393,7 @@ def init_db():
     con = _conectar()
     con.executescript(_esquema())
     migrar(con)
-    row = con.execute("SELECT id FROM empresas ORDER BY id LIMIT 1").fetchone()
+    row = con.execute("SELECT id FROM empresas WHERE COALESCE(demo,0)=0 ORDER BY id LIMIT 1").fetchone()   # nunca la demo
     if row:
         emp_id = row["id"]
     else:
@@ -696,7 +766,7 @@ def emp():
 @app.before_request
 def requiere_login():
     # "dashboard" es la raiz "/": sin sesion muestra la landing (ver dashboard()); con sesion, el tablero.
-    if request.endpoint not in ("login", "static", "landing", "dashboard") and not session.get("uid"):
+    if request.endpoint not in ("login", "static", "landing", "dashboard", "demo_entrar") and not session.get("uid"):
         return redirect("/login")
 
 @app.route("/landing")
@@ -712,7 +782,7 @@ def login():
             flash("Demasiados intentos fallidos. Esperá 5 minutos e intentá de nuevo.")
             return render_template("login.html"), 429
         u = db().execute("SELECT * FROM usuarios WHERE email=?", (email,)).fetchone()
-        if u and check_password_hash(u["clave"], request.form.get("clave", "")):
+        if u and u["rol"] != "demo" and check_password_hash(u["clave"], request.form.get("clave", "")):   # "demo" no entra por aca
             for k in claves: INTENTOS.pop(k, None)
             session.clear()  # anti session-fixation
             session.permanent = True
@@ -725,7 +795,25 @@ def login():
 
 @app.route("/salir")
 def salir():
-    session.clear(); return redirect("/login")
+    era_demo = session.get("rol") == "demo"
+    session.clear(); return redirect("/" if era_demo else "/login")
+
+@app.route("/demo")
+def demo_entrar():
+    """Entrada publica a la demo: sesion de solo lectura (rol "demo") atada a la empresa de ejemplo."""
+    if session.get("uid") and session.get("rol") != "demo":
+        flash("Ya tenés una sesión iniciada. Salí de tu cuenta para ver la demo."); return redirect("/")
+    if demo_excedido("entrada"):
+        flash("Demasiados ingresos a la demo desde tu red. Probá de nuevo en un rato o pedí tu prueba.")
+        return render_template("login.html"), 429
+    e = db().execute("SELECT id FROM empresas WHERE demo=1 ORDER BY id LIMIT 1").fetchone()
+    if not e:
+        app.logger.error("demo: no existe la empresa de ejemplo (python app.py sembrar-demo)")
+        return "La demo no está disponible por el momento.", 503
+    session.clear()   # anti session-fixation
+    session.update(uid="demo", email="", nombre="Demo", rol="demo", empresa_id=e["id"],
+                   demo_hasta=time.time() + DEMO_DURACION)
+    return redirect(url_for("dashboard"))
 
 @app.errorhandler(413)
 def archivo_muy_grande(_):
@@ -1353,12 +1441,77 @@ def borrar_empresa(eid):
     if eid == emp():
         flash("No podés borrar tu propia empresa."); return redirect("/empresas")
     d = db()
+    if d.execute("SELECT 1 FROM empresas WHERE id=? AND demo=1", (eid,)).fetchone():
+        flash("La empresa de la demo no se borra desde acá."); return redirect("/empresas")
     for tabla in ("movimientos", "flota", "archivos", "resumenes", "gastos", "usuarios"):
         d.execute(f"DELETE FROM {tabla} WHERE empresa_id=?", (eid,))
     d.execute("DELETE FROM empresas WHERE id=?", (eid,))
     d.commit(); flash("Empresa y todos sus datos eliminados.")
     return redirect("/empresas")
 
+# ================= 7) EMPRESA DE EJEMPLO PARA LA DEMO =================
+DEMO_LOCK = 7351001   # candado de PostgreSQL: que dos procesos no siembren la demo a la vez
+
+def sembrar_demo(reiniciar=False, hoy=None):
+    """Crea la empresa de ejemplo (datos ficticios de demo_datos.py) si no existe. Idempotente: correrla de nuevo no
+    duplica nada. Con reiniciar=True borra la demo y la vuelve a crear. Devuelve True si sembro."""
+    import demo_datos
+    con = _conectar()
+    try:
+        if USE_PG: con.execute("SELECT pg_advisory_lock(?)", (DEMO_LOCK,))
+        viejo = con.execute("SELECT id FROM empresas WHERE demo=1 ORDER BY id LIMIT 1").fetchone()
+        if viejo and not reiniciar:
+            return False
+        if viejo:   # solo toca filas de la empresa demo
+            for tabla in ("movimientos", "flota", "archivos", "gastos", "resumenes", "usuarios"):
+                con.execute(f"DELETE FROM {tabla} WHERE empresa_id=?", (viejo["id"],))
+            con.execute("DELETE FROM empresas WHERE id=? AND demo=1", (viejo["id"],))
+        datos = demo_datos.generar(hoy)
+        ahora = datetime.now()
+        eid = con.execute("INSERT INTO empresas(nombre,creado,demo) VALUES(?,?,1) RETURNING id",
+                          (datos["empresa"], ahora.strftime("%d/%m/%Y"))).fetchone()["id"]
+        con.executemany("INSERT INTO flota(empresa_id,tag,patente,dueno,equipo,estado,marca) VALUES(?,?,?,?,?,?,?)",
+                        [(eid, f["tag"], f["patente"], f["dueno"], f["equipo"], f["estado"], f["marca"]) for f in datos["flota"]])
+        flota = {f["tag"]: f for f in datos["flota"] if f["tag"]}
+        creado = ahora.strftime("%d/%m/%Y %H:%M")
+        for fac in datos["facturas"]:
+            movs = []
+            for it in fac["items"]:
+                f = flota.get(it["tag"])   # TAG que no esta en la flota: queda "sin control", como en la app real
+                movs.append((eid, it["fecha"], it["tag"], f["patente"] if f else "", it["concepto"], it["monto"],
+                             f["dueno"] if f else "", f["equipo"] if f else "", 1 if f else 0, fac["nombre"], ahora.isoformat()))
+            con.executemany("""INSERT INTO movimientos(empresa_id,fecha,tag,patente,concepto,monto,dueno,equipo,
+                verificado,archivo,creado) VALUES(?,?,?,?,?,?,?,?,?,?,?)""", movs)
+            con.execute("""INSERT INTO archivos(empresa_id,nombre,tipo,total_doc,contenido,mime,creado,huella)
+                VALUES(?,?,?,?,?,?,?,?)""", (eid, fac["nombre"], "Peajes", fac["total_doc"],
+                base64.b64encode(fac["pdf"]).decode(), "application/pdf", creado, fac["huella"]))
+        for res in datos["resumenes"]:
+            rid = con.execute("""INSERT INTO resumenes(empresa_id,archivo,banco,titular,periodo,vencimiento,total_resumen,creado)
+                VALUES(?,?,?,?,?,?,?,?) RETURNING id""", (eid, res["nombre"], res["banco"], res["titular"], res["periodo"],
+                res["vencimiento"], res["total"], ahora.isoformat())).fetchone()["id"]
+            con.executemany("INSERT INTO gastos(empresa_id,resumen_id,fecha,concepto,categoria,monto) VALUES(?,?,?,?,?,?)",
+                            [(eid, rid, g["fecha"], g["concepto"], g["categoria"], g["monto"]) for g in res["gastos"]])
+            con.execute("""INSERT INTO archivos(empresa_id,nombre,tipo,total_doc,contenido,mime,creado,huella)
+                VALUES(?,?,?,?,?,?,?,?)""", (eid, res["nombre"], "Resumen tarjeta", res["total"],
+                base64.b64encode(res["pdf"]).decode(), "application/pdf", creado, res["huella"]))
+        con.commit()
+        return True
+    except Exception:
+        con.rollback(); raise
+    finally:
+        if USE_PG:
+            try: con.execute("SELECT pg_advisory_unlock(?)", (DEMO_LOCK,)); con.commit()
+            except Exception: pass
+        con.close()
+
 init_db()
+if os.environ.get("DEMO_AUTO", "1") != "0":   # al arrancar se asegura que exista la demo (si falla, la app arranca igual)
+    try:
+        if sembrar_demo(): print("demo: empresa de ejemplo creada")
+    except Exception as e:
+        print(f"demo: no se pudo crear la empresa de ejemplo: {e}")
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
+    if sys.argv[1:2] == ["sembrar-demo"]:   # python app.py sembrar-demo [--reiniciar]
+        print("demo: sembrada" if sembrar_demo(reiniciar="--reiniciar" in sys.argv) else "demo: ya existia, no se tocó nada")
+    else:
+        app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)

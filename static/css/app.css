@@ -318,3 +318,20 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
   .kpi .l{font-size:10.5px}
   .stat-oscuro{min-width:0;width:100%}
 }
+
+/* ===== FRANJA DE LA DEMO (fija, visible en todas las pantallas en modo demo; ver base.html) ===== */
+.franja-demo{--franja-h:48px;position:fixed;top:0;left:0;right:0;height:var(--franja-h);z-index:60;display:flex;
+  align-items:center;justify-content:center;gap:16px;padding:0 16px;background:var(--side-bg);color:#fff;
+  border-bottom:2px solid var(--lima);font-size:13.5px;font-weight:600}
+.franja-demo .franja-txt{display:flex;align-items:center;gap:8px;min-width:0}
+.franja-demo .franja-txt .i{color:var(--lima)}
+.franja-demo .btn{flex-shrink:0}
+body.demo{padding-top:48px}
+body.demo aside{top:48px;height:calc(100vh - 48px)}
+@media(max-width:860px){ body.demo aside{top:auto;height:auto} }
+@media(max-width:520px){
+  .franja-demo{height:68px;flex-direction:column;gap:6px;justify-content:center;padding:6px 12px;text-align:center}
+  .franja-demo .franja-txt{font-size:12.5px}
+  .franja-demo .btn.chico{height:30px}
+  body.demo{padding-top:68px}
+}

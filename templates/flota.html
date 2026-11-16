@@ -3,7 +3,7 @@
 {% from "_paginado.html" import paginado %}
 {% block cuerpo %}
 <h1>Base maestra de flota</h1>
-<div class="tarjeta">
+{% if not es_demo %}<div class="tarjeta">
   <p class="mini">Subí el Excel de flota. Se detectan las columnas por encabezado (TAG, PATENTE, RESPONSABLE,
   EQUIPO, ESTADO, MARCA), se deduplican los TAGs y se reemplaza la base completa. Para un cambio puntual,
   agregá o editá equipos de a uno desde la tabla.</p>
@@ -14,11 +14,11 @@
     <a class="btn gh" href="/importar"><svg class="i"><use href="#i-volver"/></svg>Volver a importar</a>
   </form>
   <p class="mini" style="margin:12px 0 0">Descargá la plantilla, cargá tus datos y subí el archivo.</p>
-</div>
+</div>{% endif %}
 <div class="tarjeta">
   <div class="linea" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
     <h3 style="margin:0">{{ total_flota }} equipos cargados{% if q %} <span class="mini" style="margin:0">({{ total }} coinciden con la búsqueda)</span>{% endif %}</h3>
-    <button class="btn" type="button" onclick="abrirEquipo()"><svg class="i"><use href="#i-mas"/></svg>Agregar equipo</button>
+    {% if not es_demo %}<button class="btn" type="button" onclick="abrirEquipo()"><svg class="i"><use href="#i-mas"/></svg>Agregar equipo</button>{% endif %}
   </div>
   <form method="get" class="linea" style="margin-bottom:16px">
     <input type="text" name="q" value="{{ q }}" placeholder="Buscar por TAG, patente o responsable" style="max-width:360px" aria-label="Buscar equipo">
@@ -27,11 +27,11 @@
   </form>
   <div class="tabla-wrap">
   <table>
-    <tr><th>TAG</th><th>Patente</th><th>Responsable</th><th class="ocultar-mov">Equipo</th><th class="ocultar-mov">Estado</th><th class="ocultar-mov">Marca</th><th></th></tr>
+    <tr><th>TAG</th><th>Patente</th><th>Responsable</th><th class="ocultar-mov">Equipo</th><th class="ocultar-mov">Estado</th><th class="ocultar-mov">Marca</th>{% if not es_demo %}<th></th>{% endif %}</tr>
     {% for u in unidades %}
     <tr><td class="mono">{{ u.tag }}</td><td class="mono">{{ u.patente }}</td><td>{{ u.dueno }}</td>
         <td class="ocultar-mov">{{ u.equipo }}</td><td class="ocultar-mov">{{ u.estado }}</td><td class="ocultar-mov">{{ u.marca }}</td>
-        <td style="white-space:nowrap;text-align:right">
+        {% if not es_demo %}<td style="white-space:nowrap;text-align:right">
           <button class="btn-icono" type="button" title="Editar equipo" aria-label="Editar equipo"
             data-id="{{ u.id }}" data-tag="{{ u.tag }}" data-patente="{{ u.patente }}" data-dueno="{{ u.dueno }}"
             data-equipo="{{ u.equipo }}" data-estado="{{ u.estado }}" data-marca="{{ u.marca }}"
@@ -41,14 +41,14 @@
             data-id="{{ u.id }}" data-tag="{{ u.tag }}" data-patente="{{ u.patente }}"
             onclick="confirmarBaja(this)"><svg class="i"><use href="#i-papelera"/></svg></button>
           {% endif %}
-        </td></tr>
-    {% else %}<tr><td colspan="7" class="td-vacio">{% if q %}{{ vacio('buscar', 'Sin resultados', 'Ningún equipo coincide con la búsqueda.') }}{% else %}{{ vacio('camion', 'La base está vacía', 'Subí el Excel de flota o agregá un equipo.') }}{% endif %}</td></tr>{% endfor %}
+        </td>{% endif %}</tr>
+    {% else %}<tr><td colspan="{{ 6 if es_demo else 7 }}" class="td-vacio">{% if q %}{{ vacio('buscar', 'Sin resultados', 'Ningún equipo coincide con la búsqueda.') }}{% else %}{{ vacio('camion', 'La base está vacía', 'Subí el Excel de flota o agregá un equipo.') }}{% endif %}</td></tr>{% endfor %}
   </table>
   </div>
   {{ paginado(pagina, paginas) }}
 </div>
 
-<div class="modal" id="modal-equipo">
+{% if not es_demo %}<div class="modal" id="modal-equipo">
   <div class="caja" style="max-width:520px">
     <div class="cab"><h3 id="eq-titulo">Agregar equipo</h3><button type="button" onclick="cerrarEquipo()" aria-label="Cerrar"><svg class="i"><use href="#i-cerrar"/></svg></button></div>
     <div class="cuerpo" style="padding-top:20px">
@@ -81,7 +81,8 @@
     </div>
   </div>
 </div>
+{% endif %}
 {% endblock %}
 {% block script %}
-<script src="{{ url_for('static', filename='js/flota.js') }}" defer></script>
+{% if not es_demo %}<script src="{{ url_for('static', filename='js/flota.js') }}" defer></script>{% endif %}
 {% endblock %}
