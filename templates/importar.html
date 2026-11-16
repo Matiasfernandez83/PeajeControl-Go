@@ -41,14 +41,14 @@
   <h3 style="margin-bottom:16px">Archivos importados</h3>
   <div class="tabla-wrap">
   <table>
-    <tr><th>Archivo</th><th class="num">Movs.</th><th class="num">Suma extraída</th><th class="num ocultar-mov">Total doc.</th><th>Control</th>{% if not es_demo %}<th></th>{% endif %}</tr>
+    <tr><th>Archivo</th><th class="num">Movs.</th><th class="num ocultar-mov">Suma extraída</th><th class="num ocultar-mov">Total doc.</th><th>Control</th>{% if not es_demo %}<th></th>{% endif %}</tr>
     {% for a in archivos %}
     <tr>
       <td>{{ a.archivo }}</td>
       <td class="num">{{ a.n }}</td>
-      <td class="num">{{ a.t|pesos }}</td>
+      <td class="num ocultar-mov">{{ a.t|pesos }}</td>
       <td class="num ocultar-mov">{% if a.td %}{{ a.td|pesos }}{% else %}—{% endif %}</td>
-      <td>{% if not a.td %}<span class="pill sin">Sin control</span>{% elif (a.td - a.t)|abs < 1 %}<span class="pill ok">OK</span>{% else %}<span class="pill aviso">Difiere {{ (a.td - a.t)|abs|pesos }}</span>{% endif %}</td>
+      <td>{% if not a.td %}<span class="pill sin">Sin control</span>{% elif (a.td - a.t)|abs < 1 %}<span class="pill ok">OK</span>{% else %}<span class="pill difiere">Difiere {{ (a.td - a.t)|abs|pesos }}</span>{% endif %}</td>
       {% if not es_demo %}<td class="num">
         <form method="post" action="/movimientos/borrar" onsubmit="return confirm('¿Eliminar los movimientos de este archivo?')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
           <input type="hidden" name="archivo" value="{{ a.archivo }}">

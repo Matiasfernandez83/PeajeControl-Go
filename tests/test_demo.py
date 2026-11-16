@@ -202,6 +202,32 @@ def test_demo_entra_sin_registrarse_y_recorre_pantallas(demo):
         assert c.get(ruta).status_code == 200, ruta
     assert c.get(f"/archivo/{aid}").data.startswith(b"%PDF")
 
+def test_tablero_barras_proporcionales(demo):
+    """Las barras del Top 10 miden lo que dice el monto (el mayor = 100%) y las de distribucion, su parte del total."""
+    c = cliente_demo()
+    html = c.get("/").get_data(as_text=True)
+    tarjetas = html.split('<div class="tarjeta">')
+    top = next(t for t in tarjetas if "Monto por responsable" in t)
+    anchos = [float(x) for x in re.findall(r'class="relleno"[^>]*style="width:([\d.]+)%"', top)]
+    montos = [float(x.replace(".", "").replace(",", ".")) for x in re.findall(r'<span class="valor">\$([\d.,]+)</span>', top)]
+    assert len(anchos) == len(montos) >= 5
+    assert anchos[0] == 100.0 and len(set(anchos)) > 1                      # no todas iguales
+    for a, m in zip(anchos, montos):
+        assert abs(a - m / montos[0] * 100) < 0.1, (a, m)                    # proporcional al monto
+    assert 'class="pista"' in top                                            # el % es de la pista, no de toda la fila
+    dist = next(t for t in tarjetas if "Distribución de operaciones" in t)
+    a2 = [float(x) for x in re.findall(r'class="relleno [a-z]+"[^>]*style="width:([\d.]+)%"', dist)]
+    n = uno("SELECT COUNT(*) n FROM movimientos WHERE empresa_id=?", (demo,))["n"]
+    assert len(a2) == 2 and abs(sum(a2) - 100) < 0.2 and a2[0] != a2[1] and n > 0
+    assert "doble click" not in html and "Tocá «Abrir» en una tarjeta para ver el detalle." in html
+
+
+def test_pastilla_difiere_no_usa_la_clase_de_los_carteles(demo):
+    """.aviso es el cartel de mensajes (padding y margen propios): la pastilla "Difiere" no debe llevarla."""
+    html = cliente_demo().get("/importar").get_data(as_text=True)
+    assert 'class="pill difiere"' in html and "pill aviso" not in html
+
+
 def test_demo_muestra_franja_y_oculta_botones(demo):
     c = cliente_demo()
     for ruta in ("/", "/flota", "/movimientos", "/importar", "/gastos", "/reportes"):
