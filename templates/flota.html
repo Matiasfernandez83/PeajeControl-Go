@@ -3,7 +3,7 @@
 {% from "_paginado.html" import paginado %}
 {% block cuerpo %}
 <h1>Base maestra de flota</h1>
-{% if not es_demo %}<div class="tarjeta">
+{% if es_admin %}<div class="tarjeta">
   <p class="mini">Subí el Excel de flota. Se detectan las columnas por encabezado (TAG, PATENTE, RESPONSABLE,
   EQUIPO, ESTADO, MARCA), se deduplican los TAGs y se reemplaza la base completa. Para un cambio puntual,
   agregá o editá equipos de a uno desde la tabla.</p>
@@ -14,6 +14,8 @@
     <a class="btn gh" href="/importar"><svg class="i"><use href="#i-volver"/></svg>Volver a importar</a>
   </form>
   <p class="mini" style="margin:12px 0 0">Descargá la plantilla, cargá tus datos y subí el archivo.</p>
+</div>{% elif not es_demo %}<div class="tarjeta">
+  <p class="mini" style="margin:0">Podés agregar o editar equipos de a uno desde la tabla. Reemplazar la flota completa con un Excel lo hace un administrador.</p>
 </div>{% endif %}
 <div class="tarjeta">
   <div class="linea" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
@@ -36,7 +38,7 @@
             data-id="{{ u.id }}" data-tag="{{ u.tag }}" data-patente="{{ u.patente }}" data-dueno="{{ u.dueno }}"
             data-equipo="{{ u.equipo }}" data-estado="{{ u.estado }}" data-marca="{{ u.marca }}"
             onclick="abrirEquipo(this)"><svg class="i"><use href="#i-lapiz"/></svg></button>
-          {% if session.rol in ('admin','superadmin') %}
+          {% if es_admin %}
           <button class="btn-icono" type="button" title="Eliminar equipo" aria-label="Eliminar equipo"
             data-id="{{ u.id }}" data-tag="{{ u.tag }}" data-patente="{{ u.patente }}"
             onclick="confirmarBaja(this)"><svg class="i"><use href="#i-papelera"/></svg></button>
