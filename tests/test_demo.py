@@ -444,3 +444,18 @@ def test_demo_logout_vuelve_a_la_raiz(demo):
 def test_demo_sin_empresa_sembrada_responde_503():
     quitar_demo(); A.USOS_DEMO.clear()
     assert app.test_client().get("/demo").status_code == 503
+
+
+def test_landing_enlaza_a_la_demo_con_y_sin_contacto():
+    for k in ("CONTACTO_EMAIL", "CONTACTO_WHATSAPP"): os.environ.pop(k, None)
+    c = app.test_client()
+    h = c.get("/").get_data(as_text=True)
+    assert h.count('href="/demo"') >= 2 and "Ver demo, sin registrarte" in h        # hero y cierre, sin contacto configurado
+    assert 'id="contacto"' in h and "mailto:" not in h
+    assert c.get("/landing").get_data(as_text=True).count('href="/demo"') >= 2
+    os.environ["CONTACTO_EMAIL"] = "ventas@ejemplo.com"
+    try:
+        h = c.get("/").get_data(as_text=True)
+        assert h.count('href="/demo"') >= 2 and "mailto:ventas@ejemplo.com" in h and 'href="#contacto"' in h
+    finally:
+        os.environ.pop("CONTACTO_EMAIL", None)

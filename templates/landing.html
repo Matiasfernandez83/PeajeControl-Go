@@ -85,12 +85,11 @@
         y te muestra cuánto gasta cada camión y cada responsable.
         Lo que hoy te lleva horas de Excel se resuelve en mucho menos tiempo, y te marca las diferencias entre lo facturado y lo cargado.</p>
       <div class="acciones">
+        <a class="btn btn-rojo" href="/demo">Ver demo, sin registrarte <svg class="i" aria-hidden="true"><use href="#ic-arrow"/></svg></a>
         {% if contacto.hay %}
-        <a class="btn btn-rojo" href="#contacto">Solicitar demo <svg class="i" aria-hidden="true"><use href="#ic-arrow"/></svg></a>
-        <a class="btn btn-vidrio" href="/login">Ingresar</a>
-        {% else %}
-        <a class="btn btn-rojo" href="/login">Ingresar <svg class="i" aria-hidden="true"><use href="#ic-arrow"/></svg></a>
+        <a class="btn btn-vidrio" href="#contacto">Solicitar demo</a>
         {% endif %}
+        <a class="btn btn-vidrio" href="/login">Ingresar</a>
       </div>
       <div class="producto"><b>Software para flotas</b> · Control de peajes &amp; gastos</div>
     </div>
@@ -166,11 +165,13 @@
     <div class="datos">
       {% if contacto.email %}<a class="dato" href="{{ contacto.mailto }}"><svg class="i" aria-hidden="true"><use href="#ic-mail"/></svg> {{ contacto.email }}</a>{% endif %}
       {% if contacto.whatsapp %}<a class="dato" href="{{ contacto.whatsapp_url }}" target="_blank" rel="noopener"><svg class="i" aria-hidden="true"><use href="#ic-phone"/></svg> {{ contacto.whatsapp }}</a>{% endif %}
+      <a class="btn btn-blanco" href="/demo">Ver demo, sin registrarte</a>
       <a class="btn btn-blanco" href="{{ contacto.mailto or contacto.whatsapp_url }}"{% if not contacto.mailto %} target="_blank" rel="noopener"{% endif %}>Solicitar demo</a>
     </div>
     {% else %}
     <h2>Ordená los peajes de tu flota.</h2>
     <div class="datos">
+      <a class="btn btn-blanco" href="/demo">Ver demo, sin registrarte</a>
       <a class="btn btn-blanco" href="/login">Ingresar</a>
     </div>
     {% endif %}
