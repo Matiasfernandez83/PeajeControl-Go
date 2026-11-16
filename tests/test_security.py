@@ -259,8 +259,8 @@ def test_flujo_completo_y_export_sin_formulas():
                     assert not (isinstance(v, str) and v[:1] in ("=", "+", "-", "@")), f"{ruta}: celda peligrosa {v!r}"
     # config: clave, usuario, borrar usuario
     assert c.get("/config").status_code == 200
-    r = post(c, "/config/clave", {"nueva": CLAVE})
-    assert r.status_code == 302
+    r = post(c, "/config/clave", {"actual": CLAVE, "nueva": CLAVE})
+    assert r.status_code == 302 and "Clave actualizada" in c.get(r.headers["Location"]).get_data(as_text=True)
     r = post(c, "/config/usuario", {"email": "op@test.com", "clave": "operador1", "nombre": "Op"})
     assert r.status_code == 302 and "op@test.com" in c.get("/config").get_data(as_text=True)
     uid = A._conectar().execute("SELECT id FROM usuarios WHERE email='op@test.com'").fetchone()["id"]

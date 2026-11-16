@@ -18,8 +18,12 @@
       <p class="mini" style="margin-top:6px">Cambiá la clave del usuario con el que iniciaste sesión.</p>
       <form method="post" action="/config/clave"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
         <div class="campo">
-          <label>Nueva clave (mín. 6)</label>
-          <div class="clave-wrap"><input type="password" name="nueva" required>{% include "_ojo.html" %}</div>
+          <label>Clave actual</label>
+          <div class="clave-wrap"><input type="password" name="actual" autocomplete="current-password" required>{% include "_ojo.html" %}</div>
+        </div>
+        <div class="campo">
+          <label>Nueva clave (mín. 8)</label>
+          <div class="clave-wrap"><input type="password" name="nueva" minlength="8" autocomplete="new-password" required>{% include "_ojo.html" %}</div>
         </div>
         <button class="btn" type="submit">Actualizar clave</button>
       </form>
@@ -44,30 +48,35 @@
     <h3 style="margin-bottom:16px">Usuarios del sistema</h3>
     <div class="tabla-wrap">
     <table>
-      <tr><th>Nombre</th><th>Email</th><th>Rol</th><th></th></tr>
+      <tr><th>Nombre</th><th>Email</th><th>Rol</th>{% if es_admin %}<th></th>{% endif %}</tr>
       {% for u in usuarios %}
       <tr>
         <td><b>{{ u.nombre }}</b></td><td>{{ u.email }}</td>
         <td><span class="chip">{{ u.rol|capitalize }}</span></td>
-        <td class="num">
-          {% if u.id != session.uid %}
+        {% if es_admin %}<td class="num">
+          {% if u.id == session.uid %}<span class="mini" style="margin:0">(vos)</span>
+          {% elif u.rol != 'superadmin' or session.rol == 'superadmin' %}
+          <form method="post" action="/usuarios/clave/{{ u.id }}" class="linea" style="justify-content:flex-end;margin-bottom:6px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <input type="text" name="nueva" placeholder="Clave nueva (vacío: generar)" aria-label="Clave nueva para {{ u.email }}" autocomplete="off" style="max-width:210px">
+            <button class="btn chico gh" type="submit"><svg class="i"><use href="#i-candado"/></svg>Asignar clave</button>
+          </form>
           <form method="post" action="/config/usuario/borrar/{{ u.id }}" onsubmit="return confirm('¿Eliminar este usuario?')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
             <button class="btn chico gh" type="submit"><svg class="i"><use href="#i-papelera"/></svg>Eliminar</button>
           </form>
-          {% else %}<span class="mini" style="margin:0">(vos)</span>{% endif %}
-        </td>
+          {% endif %}
+        </td>{% endif %}
       </tr>
       {% endfor %}
     </table>
     </div>
   </div>
-  {% if session.rol == 'admin' %}
+  {% if es_admin %}
   <div class="tarjeta">
     <h3 class="con-icono" style="margin-bottom:16px"><svg class="i"><use href="#i-mas"/></svg>Crear usuario</h3>
     <form method="post" action="/config/usuario" class="linea"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <input type="text" name="nombre" placeholder="Nombre" aria-label="Nombre" required style="max-width:180px">
       <input type="email" name="email" placeholder="Correo" aria-label="Correo" required style="max-width:220px">
-      <div class="clave-wrap" style="max-width:190px"><input type="password" name="clave" placeholder="Clave (mín. 6)" aria-label="Clave" required>{% include "_ojo.html" %}</div>
+      <div class="clave-wrap" style="max-width:190px"><input type="password" name="clave" placeholder="Clave (mín. 8)" aria-label="Clave" minlength="8" required>{% include "_ojo.html" %}</div>
       <button class="btn" type="submit">Crear</button>
     </form>
   </div>
@@ -79,7 +88,8 @@
     <div class="kpi"><div class="top"><div class="l">Movimientos</div><div class="ic-box ac-rojo"><svg class="i"><use href="#i-rayo"/></svg></div></div><div class="v">{{ stats.movs }}</div></div>
     <div class="kpi"><div class="top"><div class="l">Gastos tarjeta</div><div class="ic-box ac-azul"><svg class="i"><use href="#i-tarjeta"/></svg></div></div><div class="v">{{ stats.gastos }}</div></div>
     <div class="kpi"><div class="top"><div class="l">Unidades en flota</div><div class="ic-box ac-verde"><svg class="i"><use href="#i-camion"/></svg></div></div><div class="v">{{ stats.flota }}</div></div>
-    <div class="kpi"><div class="top"><div class="l">Base de datos</div><div class="ic-box ac-azul"><svg class="i"><use href="#i-base"/></svg></div></div><div class="v">{{ stats.mb }} MB</div></div>
+    <div class="kpi"><div class="top"><div class="l">Archivos cargados</div><div class="ic-box ac-rojo"><svg class="i"><use href="#i-archivo"/></svg></div></div><div class="v">{{ stats.archivos }}</div></div>
+    {% if stats.mb is defined %}<div class="kpi"><div class="top"><div class="l">Base de datos (plataforma)</div><div class="ic-box ac-azul"><svg class="i"><use href="#i-base"/></svg></div></div><div class="v">{{ stats.mb }} MB</div></div>{% endif %}
   </div>
   <div class="tarjeta">
     <h3>Estado del sistema</h3>

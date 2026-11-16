@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from urllib.parse import quote, urlparse
 from flask import (Flask, g, request, redirect, session, render_template, send_file, url_for, flash, jsonify,
-                   abort, has_request_context)
+                   abort, has_request_context, make_response)
 from werkzeug.security import generate_password_hash, check_password_hash
 from openpyxl import load_workbook, Workbook
 
@@ -117,8 +117,8 @@ def demo_excedido(tipo):
         for k in [k for k, v in USOS_DEMO.items() if not v or ahora - v[-1] >= ventana]: USOS_DEMO.pop(k, None)
     return False
 
-def _volver_demo():
-    """A donde volver tras un bloqueo en un POST: la pagina de la que venia (si es de esta misma app) o el tablero."""
+def _volver():
+    """A donde volver tras un POST (o un bloqueo del modo demo): la pagina de la que venia (si es de esta misma app) o el tablero."""
     ref = urlparse(request.referrer or "")
     if ref.netloc == request.host and ref.path.startswith("/") and not ref.path.startswith("//"):
         return ref.path + (("?" + ref.query) if ref.query else "")
@@ -136,10 +136,10 @@ def modo_demo():
     if request.method in ("GET", "HEAD") and ep in DEMO_PERMITIDAS:
         if ep in ("exportar", "exportar_gastos") and demo_excedido("excel"):
             flash("Llegaste al máximo de exportaciones de la demo (5 por hora).")
-            return redirect(_volver_demo(), 303)
+            return redirect(_volver(), 303)
         return None
     flash(DEMO_AVISO)
-    return redirect("/" if request.method in ("GET", "HEAD") else _volver_demo(), 303)
+    return redirect("/" if request.method in ("GET", "HEAD") else _volver(), 303)
 
 @app.context_processor
 def inyectar_demo():
@@ -368,6 +368,22 @@ def _agregar_columnas(con):
                 except Exception: pass
                 print(f"migrar: no se pudo agregar {tabla}.{col}: {e}")
 
+def _indice_unico_huella(con):
+    """Un mismo contenido (huella) no puede guardarse dos veces en la misma empresa, ni con cargas simultaneas.
+    Indice unico PARCIAL (solo huellas no vacias): sirve igual en SQLite y PostgreSQL y es idempotente.
+    Si la base ya trae duplicados, a los repetidos se les borra la huella (los datos se conservan) y se reintenta."""
+    ddl = ("CREATE UNIQUE INDEX IF NOT EXISTS ux_arch_emp_huella ON archivos(empresa_id, huella) "
+           "WHERE huella IS NOT NULL AND huella<>''")
+    con.commit()
+    try:
+        con.execute(ddl); con.commit()
+    except INTEGRITY_ERRORS:
+        con.rollback()
+        con.execute("""UPDATE archivos SET huella='' WHERE huella IS NOT NULL AND huella<>'' AND id NOT IN
+            (SELECT MIN(id) FROM archivos WHERE huella IS NOT NULL AND huella<>'' GROUP BY empresa_id, huella)""")
+        con.execute(ddl); con.commit()
+        print("migrar: habia archivos duplicados; se les quito la huella a las copias para crear el indice unico")
+
 def migrar(con):
     # Actualiza bases creadas antes de multi-empresa sin perder datos.
     for tabla in TABLAS_TENANT:
@@ -379,6 +395,7 @@ def migrar(con):
     con.execute("CREATE INDEX IF NOT EXISTS idx_mov_emp ON movimientos(empresa_id)")
     con.execute("CREATE INDEX IF NOT EXISTS idx_arch_emp ON archivos(empresa_id, nombre)")
     con.execute("CREATE INDEX IF NOT EXISTS idx_arch_huella ON archivos(empresa_id, huella)")
+    _indice_unico_huella(con)
     # Indices para las pantallas pesadas (filtros por empresa + orden/agrupacion). Compatibles con SQLite y Postgres.
     for ddl in ("idx_mov_emp_id ON movimientos(empresa_id, id)",
                 "idx_mov_emp_patente ON movimientos(empresa_id, patente)",
@@ -510,6 +527,13 @@ BANCOS = ["GALICIA", "SANTANDER", "BBVA", "MACRO", "NACION", "PROVINCIA", "ICBC"
           "BRUBANK", "UALA", "UALÁ", "MERCADO PAGO", "MERCADOPAGO", "REBA", "WILOBANK",
           "VISA", "MASTERCARD", "MAESTRO", "AMEX", "AMERICAN EXPRESS", "CABAL", "NARANJA", "CENCOSUD"]
 
+class LecturaError(ValueError):
+    """Error de lectura con mensaje pensado para el usuario (castellano, sin detalles tecnicos).
+    Cualquier OTRA excepcion al leer un archivo es inesperada: se registra en el log y el usuario ve un aviso generico."""
+
+def msg_no_leido(nombre):
+    return f"No pudimos leer «{nombre}». Revisá que sea el formato correcto."
+
 def texto_pdf(archivo):
     import pdfplumber
     texto = ""
@@ -517,7 +541,7 @@ def texto_pdf(archivo):
         for pag in pdf.pages:
             texto += (pag.extract_text() or "") + "\n"
     if len(texto.strip()) < 40 or texto.count("(cid:") * 7 > len(texto) * 0.3:
-        raise ValueError("El PDF parece escaneado o ilegible; subí el Excel/CSV del resumen.")
+        raise LecturaError("El PDF parece escaneado o ilegible; subí el Excel/CSV del resumen.")
     return texto
 
 def categorizar(desc):
@@ -650,7 +674,7 @@ def analizar_texto_peajes(texto):
 def parsear_pdf_peajes(archivo):
     r = parsear_factura_peajes(archivo)
     if not r["emisor"] and not r["items"]:
-        raise ValueError("no reconozco el emisor de este PDF (no es una factura de peaje conocida).")
+        raise LecturaError("no reconozco el emisor de este PDF (no es una factura de peaje conocida).")
     return r["items"], r["total_doc"], r["emisor"]
 
 def parsear_pdf_tarjeta(archivo):
@@ -695,7 +719,7 @@ def extraer_items_peajes(arch, contenido):
     filas = leer_filas(arch, campos, "monto")
     mapa, inicio = mapear_columnas(filas, campos)
     if not mapa or "monto" not in mapa:
-        raise ValueError("no se detectaron las columnas (se necesita al menos IMPORTE/MONTO).")
+        raise LecturaError("no se detectaron las columnas (se necesita al menos IMPORTE/MONTO).")
     items = []
     for fila in filas[inicio:]:
         get = lambda c: fila[mapa[c]] if c in mapa and mapa[c] < len(fila) else ""
@@ -763,11 +787,40 @@ def emp():
     """Empresa (inquilino) del usuario logueado. Toda consulta de datos se filtra por esto."""
     return session.get("empresa_id")
 
+MIN_CLAVE = 8
+MSG_CLAVE = f"La clave debe tener al menos {MIN_CLAVE} caracteres."
+
+def es_admin():
+    return session.get("rol") in ("admin", "superadmin")
+
+@app.context_processor
+def inyectar_rol():
+    return {"es_admin": es_admin()}
+
+def _huella_clave(hash_clave):
+    """Marca corta de la clave guardada: si la clave cambia, las sesiones abiertas con la clave vieja dejan de valer."""
+    return hashlib.sha256((hash_clave or "").encode()).hexdigest()[:16]
+
 @app.before_request
 def requiere_login():
     # "dashboard" es la raiz "/": sin sesion muestra la landing (ver dashboard()); con sesion, el tablero.
-    if request.endpoint not in ("login", "static", "landing", "dashboard", "demo_entrar") and not session.get("uid"):
+    ep = request.endpoint
+    if not session.get("uid"):
+        return None if ep in ("login", "static", "landing", "dashboard", "demo_entrar") else redirect("/login")
+    if session.get("rol") == "demo" or ep in ("login", "static", "landing", "demo_entrar", "salir"):
+        return None
+    # Revalida la sesion contra la base en cada request (una consulta por clave primaria): si el usuario o su empresa
+    # ya no existen, o le cambiaron la clave, se cierra la sesion; el rol y la empresa se toman SIEMPRE de la base.
+    u = db().execute("""SELECT u.rol, u.nombre, u.email, u.empresa_id, u.clave, e.id eid FROM usuarios u
+        LEFT JOIN empresas e ON e.id=u.empresa_id WHERE u.id=?""", (session["uid"],)).fetchone()
+    ck = _huella_clave(u["clave"]) if u else None
+    if not u or u["eid"] is None or u["rol"] == "demo" or session.get("ck", ck) != ck:
+        session.clear()
+        flash("Tu sesión ya no es válida. Iniciá sesión de nuevo.")
         return redirect("/login")
+    actual = dict(rol=u["rol"], empresa_id=u["empresa_id"], nombre=u["nombre"], email=u["email"], ck=ck)
+    if any(session.get(k) != v for k, v in actual.items()):
+        session.update(actual)
 
 @app.route("/landing")
 def landing():
@@ -787,7 +840,7 @@ def login():
             session.clear()  # anti session-fixation
             session.permanent = True
             session.update(uid=u["id"], email=u["email"], nombre=u["nombre"],
-                           rol=u["rol"], empresa_id=u["empresa_id"])
+                           rol=u["rol"], empresa_id=u["empresa_id"], ck=_huella_clave(u["clave"]))
             return redirect("/")
         for k in claves: INTENTOS[k].append(time.time())
         flash("Credenciales invalidas.")
@@ -849,10 +902,14 @@ SEL_MOV = ("SELECT m.*, a.id archivo_id FROM movimientos m LEFT JOIN archivos a 
            "ON a.empresa_id=m.empresa_id AND a.nombre=m.archivo")
 MOV_POR_PAGINA = 50
 
+def _entero(v, defecto=1):
+    """Entero positivo de hasta 9 digitos ASCII, o `defecto`. (str.isdigit acepta '²' y int() revienta: daba error 500.)"""
+    v = str(v or "")
+    return int(v) if re.fullmatch(r"[0-9]{1,9}", v) else defecto
+
 def paginar(total, por=MOV_POR_PAGINA):
     """(pagina, paginas, offset) a partir de ?p=, igual que /flota."""
-    p = request.args.get("p", "1")
-    pagina = max(int(p), 1) if p.isdigit() else 1
+    pagina = max(_entero(request.args.get("p")), 1)
     paginas = max((total + por - 1) // por, 1)
     pagina = min(pagina, paginas)
     return pagina, paginas, (pagina - 1) * por
@@ -987,15 +1044,18 @@ def movimientos():
 
 @app.route("/movimientos/borrar", methods=["POST"])
 def borrar_movimientos():
-    ids = [int(i) for i in request.form.getlist("ids") if str(i).isdigit()]
+    if not es_admin():
+        flash("Solo un administrador puede eliminar movimientos."); return redirect(_volver())
+    ids = [int(i) for i in request.form.getlist("ids") if re.fullmatch(r"[0-9]{1,9}", str(i))]
     arch = request.form.get("archivo")
     d = db(); E = emp()
     if ids:
         d.executemany("DELETE FROM movimientos WHERE id=? AND empresa_id=?", [(i, E) for i in ids])
     elif arch:
         d.execute("DELETE FROM movimientos WHERE archivo=? AND empresa_id=?", (arch, E))
+        d.execute("DELETE FROM archivos WHERE nombre=? AND tipo='Peajes' AND empresa_id=?", (arch, E))   # y el archivo guardado
     d.commit(); flash("Registros eliminados.")
-    return redirect(request.referrer or "/movimientos")
+    return redirect(_volver() if request.referrer else "/movimientos")
 
 # ================= 2) IMPORTAR =================
 MAX_ARCHIVOS_CARGA = 15   # tope de archivos por carga multiple
@@ -1006,8 +1066,11 @@ def procesar_peaje(arch, flota_map, flota_pat):
     try:
         contenido = arch.read()
         items, total_doc, r["emisor"] = extraer_items_peajes(arch, contenido)
-    except Exception as e:
+    except LecturaError as e:
         r["mensaje"] = str(e); return r
+    except Exception:   # inesperado (archivo corrupto, formato raro): el detalle tecnico va al log, nunca al usuario
+        app.logger.exception("importar: no se pudo leer %s", arch.filename)
+        r["mensaje"] = msg_no_leido(arch.filename); r["completo"] = True; return r
     if not items:
         r["mensaje"] = ("sin movimientos (si es un PDF escaneado, subi el Excel/CSV)"
                         if arch.filename.lower().endswith(".pdf") else "sin movimientos")
@@ -1033,6 +1096,12 @@ def procesar_peaje(arch, flota_map, flota_pat):
             dueno,equipo,verificado,archivo,creado) VALUES(?,?,?,?,?,?,?,?,?,?,?)""", nuevos)
         guardar_archivo(nombre, "Peajes", total_doc, contenido, mime, huella)
         d.commit()
+    except INTEGRITY_ERRORS:   # dos cargas iguales a la vez: el indice unico (empresa, huella) deja pasar solo una
+        d.rollback()
+        previo = buscar_duplicado(d, "Peajes", arch.filename, huella, total_doc, len(items))
+        d.commit()
+        r["estado"] = "duplicado"; r["mensaje"] = aviso_duplicado(arch.filename, previo or {"creado": ""})
+        return r
     except Exception:
         d.rollback()   # en PostgreSQL la transaccion fallida queda abortada hasta este rollback
         app.logger.exception("importar: fallo al guardar %s", arch.filename)
@@ -1069,8 +1138,8 @@ def importar():
         for a in archivos:   # si un archivo falla, los demas igual se procesan
             r = procesar_peaje(a, flota_map, flota_pat)
             emisor = f" [{r['emisor']}]" if r["emisor"] else ""
-            if r["estado"] == "duplicado":   # el aviso ya trae el nombre del archivo
-                flash(f"{iconos['duplicado']} {r['mensaje']}")
+            if r["estado"] == "duplicado" or r.get("completo"):   # el aviso ya trae el nombre del archivo
+                flash(f"{iconos[r['estado']]} {r['mensaje']}")
             else:
                 flash(f"{iconos[r['estado']]} {r['archivo']}{emisor}: {r['mensaje']}")
         if omitidos:
@@ -1100,13 +1169,17 @@ FLOTA_POR_PAGINA = 50
 def flota():
     d = db()
     if request.method == "POST" and request.files.get("archivo"):
+        if not es_admin():   # reemplaza TODA la flota: solo administradores (el operador agrega/edita de a uno)
+            flash("Solo un administrador puede reemplazar la flota completa. Podés agregar o editar equipos de a uno.")
+            return redirect("/flota")
         try:
             campos = ["tag", "patente", "dueno", "equipo", "estado", "marca"]
             filas = leer_filas(request.files["archivo"], campos, "tag")
             mapa, inicio = mapear_columnas(filas, campos)
-        except Exception as e:
+        except Exception:   # detalle tecnico al log, aviso generico al usuario
+            app.logger.exception("flota: no se pudo leer %s", request.files["archivo"].filename)
             mapa, inicio, filas = None, 0, []
-            flash(f"Error al leer: {e}")
+            flash(msg_no_leido(request.files["archivo"].filename))
         if filas and (not mapa or "tag" not in mapa):
             flash("No se detectaron las columnas (se necesita al menos TAG).")
         elif mapa:
@@ -1123,8 +1196,7 @@ def flota():
             flash(f"Base actualizada: {len(nuevos)} unidades unicas.")
         return redirect("/flota")
     q = request.args.get("q", "").strip()
-    p = request.args.get("p", "1")
-    pagina = max(int(p), 1) if p.isdigit() else 1
+    pagina = max(_entero(request.args.get("p")), 1)
     where, args = " WHERE empresa_id=?", [emp()]
     if q:
         like = "%" + q.upper() + "%"
@@ -1186,7 +1258,7 @@ def flota_editar(fid):
 
 @app.route("/flota/borrar/<int:fid>", methods=["POST"])
 def flota_borrar(fid):
-    if session.get("rol") not in ("admin", "superadmin"):
+    if not es_admin():
         flash("Solo un administrador puede eliminar equipos."); return redirect("/flota")
     d = db()
     existe = d.execute("SELECT 1 FROM flota WHERE id=? AND empresa_id=?", (fid, emp())).fetchone()
@@ -1208,7 +1280,7 @@ def procesar_resumen(arch):
             filas = leer_filas(arch, campos, "monto")
             mapa, inicio = mapear_columnas(filas, campos)
             if not mapa or "monto" not in mapa:
-                raise ValueError("no se detectaron columnas FECHA/DESCRIPCION/MONTO.")
+                raise LecturaError("no se detectaron columnas FECHA/DESCRIPCION/MONTO.")
             items = []
             for fila in filas[inicio:]:
                 get = lambda c: fila[mapa[c]] if c in mapa and mapa[c] < len(fila) else ""
@@ -1220,8 +1292,8 @@ def procesar_resumen(arch):
             meta = {"banco": "Excel", "titular": "", "periodo": "", "vencimiento": "-",
                     "total": sum(i["monto"] for i in items)}
         if not items:
-            raise ValueError("El PDF parece escaneado o ilegible; subí el Excel/CSV del resumen."
-                             if arch.filename.lower().endswith(".pdf") else "no se encontraron consumos en el resumen.")
+            raise LecturaError("El PDF parece escaneado o ilegible; subí el Excel/CSV del resumen."
+                               if arch.filename.lower().endswith(".pdf") else "no se encontraron consumos en el resumen.")
         huella = huella_de(contenido)
         previo = buscar_duplicado(d, "Resumen tarjeta", arch.filename, huella, meta["total"], len(items))
         if previo:
@@ -1229,9 +1301,13 @@ def procesar_resumen(arch):
             return None, aviso_duplicado(arch.filename, previo)
         nombre = nombre_libre(d, arch.filename)
         mime = "application/pdf" if arch.filename.lower().endswith(".pdf") else "application/vnd.ms-excel"
-    except Exception as e:
+    except LecturaError as e:
         d.rollback()
         return False, f"{arch.filename}: {e}"
+    except Exception:   # inesperado: detalle tecnico al log, aviso generico al usuario
+        d.rollback()
+        app.logger.exception("gastos: no se pudo leer %s", arch.filename)
+        return False, msg_no_leido(arch.filename)
     try:   # todo o nada por archivo
         cur = d.execute("""INSERT INTO resumenes(empresa_id,archivo,banco,titular,periodo,vencimiento,total_resumen,creado)
             VALUES(?,?,?,?,?,?,?,?) RETURNING id""", (emp(), nombre, meta["banco"], meta["titular"], meta["periodo"],
@@ -1241,6 +1317,11 @@ def procesar_resumen(arch):
                       [(emp(), rid, i["fecha"], i["concepto"], i["categoria"], i["monto"]) for i in items])
         guardar_archivo(nombre, "Resumen tarjeta", meta["total"], contenido, mime, huella)
         d.commit()
+    except INTEGRITY_ERRORS:   # carga identica simultanea: ya quedo guardada por la otra
+        d.rollback()
+        previo = buscar_duplicado(d, "Resumen tarjeta", arch.filename, huella, meta["total"], len(items))
+        d.commit()
+        return None, aviso_duplicado(arch.filename, previo or {"creado": ""})
     except Exception:
         d.rollback()   # en PostgreSQL la transaccion fallida queda abortada hasta este rollback
         app.logger.exception("gastos: fallo al guardar %s", arch.filename)
@@ -1283,6 +1364,8 @@ def gastos():
 
 @app.route("/gastos/borrar/<int:rid>", methods=["POST"])
 def borrar_resumen(rid):
+    if not es_admin():
+        flash("Solo un administrador puede eliminar resúmenes."); return redirect("/gastos")
     d = db(); E = emp()
     d.execute("DELETE FROM gastos WHERE resumen_id=? AND empresa_id=?", (rid, E))
     d.execute("DELETE FROM resumenes WHERE id=? AND empresa_id=?", (rid, E))
@@ -1319,6 +1402,8 @@ def descargar_archivo(nombre):
 
 @app.route("/reportes/borrar", methods=["POST"])
 def borrar_archivo():
+    if not es_admin():
+        flash("Solo un administrador puede eliminar archivos."); return redirect("/reportes")
     nombres = request.form.getlist("nombres") or ([request.form["nombre"]] if request.form.get("nombre") else [])
     d = db(); E = emp()
     for nombre in nombres:
@@ -1354,31 +1439,43 @@ def config():
         "movs": d.execute("SELECT COUNT(*) n FROM movimientos WHERE empresa_id=?", (E,)).fetchone()["n"],
         "gastos": d.execute("SELECT COUNT(*) n FROM gastos WHERE empresa_id=?", (E,)).fetchone()["n"],
         "flota": d.execute("SELECT COUNT(*) n FROM flota WHERE empresa_id=?", (E,)).fetchone()["n"],
-        "mb": (round(d.execute("SELECT pg_database_size(current_database()) s").fetchone()["s"] / 1048576, 2)
-               if USE_PG else (round(os.path.getsize(DB) / 1048576, 2) if os.path.exists(DB) else 0)),
+        "archivos": d.execute("SELECT COUNT(*) n FROM archivos WHERE empresa_id=?", (E,)).fetchone()["n"],
     }
+    if session.get("rol") == "superadmin":   # el tamaño de la base es de toda la plataforma: solo lo ve el superadmin
+        stats["mb"] = (round(d.execute("SELECT pg_database_size(current_database()) s").fetchone()["s"] / 1048576, 2)
+                       if USE_PG else (round(os.path.getsize(DB) / 1048576, 2) if os.path.exists(DB) else 0))
     return render_template("config.html", usuarios=usuarios, stats=stats)
 
 @app.route("/config/clave", methods=["POST"])
 def cambiar_clave():
-    nueva = request.form["nueva"].strip()
-    if len(nueva) < 6:
-        flash("La clave debe tener al menos 6 caracteres.")
+    k = f"c:{session['uid']}"   # tope de intentos fallidos con la clave actual (igual que el login)
+    if _bloqueado([k]):
+        flash("Demasiados intentos fallidos. Esperá 5 minutos e intentá de nuevo."); return redirect("/config")
+    nueva = request.form.get("nueva", "").strip()
+    d = db()
+    u = d.execute("SELECT clave FROM usuarios WHERE id=?", (session["uid"],)).fetchone()
+    if not u or not check_password_hash(u["clave"], request.form.get("actual", "")):
+        INTENTOS[k].append(time.time()); flash("La clave actual no es correcta.")
+    elif len(nueva) < MIN_CLAVE:
+        flash(MSG_CLAVE)
     else:
-        db().execute("UPDATE usuarios SET clave=? WHERE id=?",
-                     (generate_password_hash(nueva), session["uid"]))
-        db().commit(); flash("Clave actualizada.")
+        nuevo_hash = generate_password_hash(nueva)
+        d.execute("UPDATE usuarios SET clave=? WHERE id=?", (nuevo_hash, session["uid"])); d.commit()
+        session["ck"] = _huella_clave(nuevo_hash)   # esta sesion sigue valida; las demas abiertas con la clave vieja se cierran
+        INTENTOS.pop(k, None); flash("Clave actualizada.")
     return redirect("/config")
 
 @app.route("/config/usuario", methods=["POST"])
 def crear_usuario():
-    if session.get("rol") not in ("admin", "superadmin"):
+    if not es_admin():
         flash("Solo un administrador puede crear usuarios."); return redirect("/config")
-    email = request.form["email"].strip().lower()
-    clave = request.form["clave"].strip()
-    nombre = request.form["nombre"].strip()
-    if len(clave) < 6:
-        flash("La clave debe tener al menos 6 caracteres.")
+    email = request.form.get("email", "").strip().lower()
+    clave = request.form.get("clave", "").strip()
+    nombre = request.form.get("nombre", "").strip()
+    if "@" not in email:
+        flash("Ingresá un correo válido.")
+    elif len(clave) < MIN_CLAVE:
+        flash(MSG_CLAVE)
     else:
         try:
             db().execute("INSERT INTO usuarios(empresa_id,email,clave,nombre) VALUES(?,?,?,?)",
@@ -1390,14 +1487,43 @@ def crear_usuario():
 
 @app.route("/config/usuario/borrar/<int:uid>", methods=["POST"])
 def borrar_usuario(uid):
-    if session.get("rol") not in ("admin", "superadmin"):
+    if not es_admin():
         flash("Solo un administrador puede eliminar usuarios."); return redirect("/config")
     if uid == session["uid"]:
         flash("No podes eliminar tu propio usuario.")
-    else:
-        db().execute("DELETE FROM usuarios WHERE id=? AND empresa_id=?", (uid, emp())); db().commit()
+    else:   # un admin de empresa no puede tocar a un superadmin (solo otro superadmin)
+        extra = "" if session.get("rol") == "superadmin" else " AND rol<>'superadmin'"
+        db().execute("DELETE FROM usuarios WHERE id=? AND empresa_id=?" + extra, (uid, emp())); db().commit()
         flash("Usuario eliminado.")
     return redirect("/config")
+
+@app.route("/usuarios/clave/<int:uid>", methods=["POST"])
+def resetear_clave(uid):
+    """Asigna una clave nueva a OTRO usuario. Superadmin: a cualquiera. Admin: solo a usuarios de su empresa
+    (y nunca a un superadmin). Si no se escribe una clave, se genera una temporal que se muestra una sola vez."""
+    if not es_admin():
+        flash("Solo un administrador puede asignar claves."); return redirect("/config")
+    super_ = session.get("rol") == "superadmin"
+    volver = "/empresas" if super_ and request.form.get("volver") == "empresas" else "/config"
+    if uid == session["uid"]:
+        flash("Tu propia clave se cambia desde «Seguridad de la cuenta», con la clave actual."); return redirect(volver)
+    d = db()
+    if super_:
+        u = d.execute("SELECT id,email FROM usuarios WHERE id=?", (uid,)).fetchone()
+    else:
+        u = d.execute("SELECT id,email FROM usuarios WHERE id=? AND empresa_id=? AND rol<>'superadmin'", (uid, emp())).fetchone()
+    if not u:
+        flash("Usuario no encontrado."); return redirect(volver)
+    escrita = request.form.get("nueva", "").strip()
+    if escrita and len(escrita) < MIN_CLAVE:
+        flash(MSG_CLAVE); return redirect(volver)
+    nueva = escrita or secrets.token_urlsafe(9)
+    d.execute("UPDATE usuarios SET clave=? WHERE id=?", (generate_password_hash(nueva), u["id"])); d.commit()
+    if escrita:
+        flash(f"Clave de {u['email']} actualizada."); return redirect(volver)
+    resp = make_response(render_template("clave_nueva.html", email=u["email"], clave=nueva, volver=volver))
+    resp.headers["Cache-Control"] = "no-store"   # la clave temporal se ve una sola vez: que no quede en el cache
+    return resp
 
 # ================= 6) EMPRESAS (solo superadmin) =================
 @app.route("/empresas")
@@ -1409,7 +1535,9 @@ def empresas():
         (SELECT COUNT(*) FROM flota f WHERE f.empresa_id=e.id) flota,
         (SELECT COUNT(*) FROM movimientos m WHERE m.empresa_id=e.id) movimientos
         FROM empresas e ORDER BY e.id""").fetchall()
-    return render_template("empresas.html", empresas=filas)
+    usuarios = db().execute("""SELECT u.id, u.nombre, u.email, u.rol, e.nombre empresa FROM usuarios u
+        JOIN empresas e ON e.id=u.empresa_id WHERE COALESCE(e.demo,0)=0 ORDER BY e.id, u.id""").fetchall()
+    return render_template("empresas.html", empresas=filas, usuarios=usuarios)
 
 @app.route("/empresas/crear", methods=["POST"])
 def crear_empresa():
@@ -1419,8 +1547,8 @@ def crear_empresa():
     email = request.form.get("email", "").strip().lower()
     clave = request.form.get("clave", "").strip()
     nombre_admin = request.form.get("nombre", "").strip()
-    if not nombre_emp or not email or len(clave) < 6:
-        flash("Completá empresa, email y una clave de al menos 6 caracteres.")
+    if not nombre_emp or "@" not in email or len(clave) < MIN_CLAVE:
+        flash(f"Completá empresa, email y una clave de al menos {MIN_CLAVE} caracteres.")
         return redirect("/empresas")
     d = db()
     try:

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block cuerpo %}
+<div class="pagina-cab">
+  <div>
+    <h1>Clave temporal generada</h1>
+    <p class="sub">Para <b>{{ email }}</b>. Se muestra una sola vez: copiala ahora y pasásela por un medio seguro.</p>
+  </div>
+</div>
+<div class="tarjeta">
+  <div class="etiqueta">Clave temporal</div>
+  <div class="mono" style="font-size:24px;font-weight:700;margin:8px 0 16px;user-select:all">{{ clave }}</div>
+  <p class="mini">Si cerrás o recargás esta página no se puede volver a ver; en ese caso asigná otra clave.</p>
+  <a class="btn" href="{{ volver }}"><svg class="i"><use href="#i-volver"/></svg>Volver</a>
+</div>
+{% endblock %}

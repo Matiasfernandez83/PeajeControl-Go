@@ -40,7 +40,7 @@
             <div class="banco">{{ s.banco }}</div>
             <div class="titular">{{ s.titular or 'Sin titular' }}</div>
           </div>
-          {% if not es_demo %}<form method="post" action="/gastos/borrar/{{ s.id }}" style="margin-left:auto" onsubmit="return confirm('¿Eliminar este resumen?')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          {% if es_admin %}<form method="post" action="/gastos/borrar/{{ s.id }}" style="margin-left:auto" onsubmit="return confirm('¿Eliminar este resumen?')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
             <button class="btn-icono" type="submit" title="Eliminar resumen" aria-label="Eliminar resumen"><svg class="i"><use href="#i-papelera"/></svg></button>
           </form>{% endif %}
         </div>

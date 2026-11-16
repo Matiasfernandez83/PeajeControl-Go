@@ -26,7 +26,7 @@
         <input type="text" name="nombre" placeholder="Juan Pérez"></div>
       <div class="campo"><label>Email del administrador</label>
         <input type="email" name="email" required placeholder="admin@empresa.com"></div>
-      <div class="campo"><label>Clave inicial (mín. 6)</label>
+      <div class="campo"><label>Clave inicial (mín. 8)</label>
         <div class="clave-wrap"><input type="password" name="clave" required>{% include "_ojo.html" %}</div></div>
       <button class="btn" type="submit">Crear empresa</button>
     </form>
@@ -48,7 +48,7 @@
           {% if e.id == session.empresa_id %}
           <span class="mini" style="margin:0">(vos)</span>
           {% else %}
-          <form method="post" action="/empresas/borrar/{{ e.id }}" onsubmit="return confirm('¿Eliminar la empresa «{{ e.nombre }}» y TODOS sus datos (flota, movimientos, gastos y usuarios)? Esta acción no se puede deshacer.')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <form method="post" action="/empresas/borrar/{{ e.id }}" onsubmit='return confirm({{ ("¿Eliminar la empresa «" ~ e.nombre ~ "» y TODOS sus datos (flota, movimientos, gastos y usuarios)? Esta acción no se puede deshacer.")|tojson }})'><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
             <button class="btn chico gh" type="submit"><svg class="i"><use href="#i-papelera"/></svg>Eliminar</button>
           </form>
           {% endif %}
@@ -57,6 +57,31 @@
       {% else %}<tr><td colspan="6" class="td-vacio">{{ vacio('empresa', 'Todavía no hay empresas', 'Dá de alta la primera con el formulario.') }}</td></tr>{% endfor %}
     </table>
     </div>
+  </div>
+</div>
+
+<div class="tarjeta">
+  <h3 style="margin-bottom:6px">Usuarios de las empresas</h3>
+  <p class="mini" style="margin:0 0 16px">Asigná una clave nueva si alguien la olvidó. Si dejás el campo vacío se genera una temporal que se muestra una sola vez.</p>
+  <div class="tabla-wrap">
+  <table>
+    <tr><th>Empresa</th><th>Nombre</th><th>Email</th><th>Rol</th><th></th></tr>
+    {% for u in usuarios %}
+    <tr>
+      <td>{{ u.empresa }}</td><td><b>{{ u.nombre }}</b></td><td>{{ u.email }}</td><td><span class="chip">{{ u.rol|capitalize }}</span></td>
+      <td class="num">
+        {% if u.id == session.uid %}<span class="mini" style="margin:0">(vos)</span>
+        {% else %}
+        <form method="post" action="/usuarios/clave/{{ u.id }}" class="linea" style="justify-content:flex-end"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="volver" value="empresas">
+          <input type="text" name="nueva" placeholder="Clave nueva (vacío: generar)" aria-label="Clave nueva para {{ u.email }}" autocomplete="off" style="max-width:210px">
+          <button class="btn chico gh" type="submit"><svg class="i"><use href="#i-candado"/></svg>Asignar clave</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
   </div>
 </div>
 {% endblock %}
