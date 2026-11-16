@@ -24,7 +24,7 @@
         <input type="text" name="empresa" required placeholder="Transportes del Sur SA"></div>
       <div class="campo"><label>Nombre del administrador</label>
         <input type="text" name="nombre" placeholder="Juan Pérez"></div>
-      <div class="campo"><label>Email del administrador</label>
+      <div class="campo"><label>Correo del administrador</label>
         <input type="email" name="email" required placeholder="admin@empresa.com"></div>
       <div class="campo"><label>Clave inicial (mín. 6)</label>
         <div class="clave-wrap"><input type="password" name="clave" required>{% include "_ojo.html" %}</div></div>
@@ -49,7 +49,7 @@
           <span class="mini" style="margin:0">(vos)</span>
           {% else %}
           <form method="post" action="/empresas/borrar/{{ e.id }}" onsubmit="return confirm('¿Eliminar la empresa «{{ e.nombre }}» y TODOS sus datos (flota, movimientos, gastos y usuarios)? Esta acción no se puede deshacer.')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-            <button class="btn chico gh" type="submit"><svg class="i"><use href="#i-papelera"/></svg>Eliminar</button>
+            <button class="btn chico gh" type="submit" title="Eliminar empresa" aria-label="Eliminar empresa"><svg class="i"><use href="#i-papelera"/></svg><span class="ocultar-mov">Eliminar</span></button>
           </form>
           {% endif %}
         </td>

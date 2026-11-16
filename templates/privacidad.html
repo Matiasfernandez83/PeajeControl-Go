@@ -1,0 +1,60 @@
+{% extends "legal_base.html" %}
+{% block titulo %}Política de privacidad{% endblock %}
+{% block descripcion %}Qué datos guarda PeajeControl Go, para qué los usa, dónde se alojan y cómo ejercer tus derechos (Ley 25.326).{% endblock %}
+{% block h1 %}Política de privacidad{% endblock %}
+{% block cuerpo %}
+<p>Esta política explica qué datos guardamos cuando usás PeajeControl Go, para qué los usamos y qué derechos tenés. Se rige por la Ley 25.326 de Protección de los Datos Personales de la República Argentina.</p>
+
+<h2>1. Quién es el responsable</h2>
+<p>El responsable del tratamiento de los datos es <b>Matías Federico Fernández</b>, titular de PeajeControl Go.</p>
+<ul>
+  {% if legal.cuit %}<li>CUIT: {{ legal.cuit }}</li>{% endif %}
+  {% if legal.domicilio %}<li>Domicilio: {{ legal.domicilio }}</li>{% endif %}
+  {% if contacto.whatsapp %}<li>WhatsApp: <a href="{{ contacto.whatsapp_url }}" target="_blank" rel="noopener">{{ contacto.whatsapp }}</a></li>{% endif %}
+  {% if contacto.email %}<li>Correo: <a href="{{ contacto.mailto }}">{{ contacto.email }}</a></li>{% endif %}
+  {% if not contacto.hay %}<li>Contacto: por los medios que figuran en la <a href="/landing#contacto">portada</a>.</li>{% endif %}
+</ul>
+
+<h2>2. Qué datos guardamos</h2>
+<ul>
+  <li><b>De las personas que usan la cuenta:</b> nombre, correo electrónico y rol (por ejemplo, administrador). La clave se guarda cifrada: no podemos verla.</li>
+  <li><b>De la flota:</b> patentes, números de TAG, responsables, equipo, estado y marca de cada unidad.</li>
+  <li><b>Las facturas de peaje y los gastos que subís:</b> el archivo original (PDF, Excel o CSV) y lo que se lee de él: fechas, TAGs, patentes, conceptos, montos, banco, titular, período y vencimiento de los resúmenes.</li>
+  <li><b>Registros técnicos de errores:</b> cuando algo falla, el servidor anota la fecha, la dirección de la página, el número interno de usuario y de empresa y el error. No anota claves ni el contenido de tus archivos.</li>
+</ul>
+<p>Te pedimos que subas solo lo necesario. Por ejemplo, evitá incluir números completos de tarjeta.</p>
+
+<h2>3. Para qué los usamos</h2>
+<p>Solamente para darte el servicio: leer tus archivos, cruzar cada pase contra tu flota, armar el tablero, los reportes y las exportaciones, dar soporte y mantener la seguridad de la cuenta. No vendemos ni cedemos tus datos, no los usamos para publicidad ni para armar perfiles, y la lectura de archivos no usa inteligencia artificial.</p>
+
+<h2>4. Dónde se alojan</h2>
+<p>La aplicación y su base de datos funcionan en servidores en la nube de proveedores externos. Esos servidores pueden estar fuera de la Argentina; los datos se envían allí solo para prestar el servicio. La información de cada empresa se mantiene separada de las demás y la conexión es cifrada (HTTPS).</p>
+
+<h2>5. Cuánto tiempo los conservamos</h2>
+<p>Mientras tu cuenta esté activa. Podés borrar movimientos, resúmenes y archivos desde la app cuando quieras. Si pedís la baja, borramos los datos de tu empresa dentro de los 30 días, salvo que una norma nos obligue a guardar algo. Las copias de resguardo de los proveedores pueden tardar un poco más en desaparecer.</p>
+
+<h2>6. Tus derechos</h2>
+<p>Como titular de los datos podés pedir en cualquier momento:</p>
+<ul>
+  <li><b>Acceso:</b> saber qué datos tuyos tenemos. Es gratis y podés pedirlo cada 6 meses.</li>
+  <li><b>Rectificación y actualización:</b> corregir datos que estén mal o desactualizados.</li>
+  <li><b>Supresión:</b> que borremos tus datos.</li>
+</ul>
+<p>Para pedirlo, escribinos por los datos de contacto del punto 1 indicando tu nombre, el correo de tu cuenta y qué querés pedir. Podemos pedirte que confirmes tu identidad. Respondemos el pedido de acceso en un máximo de 10 días corridos, y los de rectificación o supresión en un máximo de 5 días hábiles.</p>
+<p>Si los datos que figuran son de un chofer o responsable de tu flota, quien los cargó fue tu empresa: también podés pedírselos a ella.</p>
+
+<h2>7. Autoridad de control</h2>
+<p>La Agencia de Acceso a la Información Pública (AAIP) es el órgano de control de la Ley 25.326. Tiene la atribución de atender las denuncias y reclamos de quienes consideren que sus derechos no fueron respetados. Podés consultarla en <a href="https://www.argentina.gob.ar/aaip" target="_blank" rel="noopener">argentina.gob.ar/aaip</a>.</p>
+
+<h2>8. Cookies</h2>
+<p>Usamos <b>una sola cookie, de sesión</b>: sirve para mantenerte con la sesión iniciada y proteger los formularios, y se borra cuando salís o vence (a las 8 horas). No usamos cookies de publicidad, de rastreo ni de estadísticas de terceros. Además, tu navegador recuerda en tu propio equipo si elegiste el modo noche o el modo día; ese dato no se envía a nuestros servidores.</p>
+
+<h2>9. La demo</h2>
+<p>La demo usa datos ficticios, de ejemplo. Para entrar no te pedimos nombre, correo ni ningún dato, y no se guarda nada tuyo. Solo se crea una cookie de sesión que dura 30 minutos. Para evitar abusos, el servidor cuenta en su memoria, de forma temporal, cuántas veces se entró desde una misma conexión; ese conteo no se guarda en la base de datos.</p>
+
+<h2>10. Seguridad</h2>
+<p>Cifrado de la conexión, claves guardadas con cifrado, datos separados por empresa y límite de intentos de ingreso. Ningún sistema es infalible, pero trabajamos para proteger tu información y, si ocurriera algo que te afecte, te avisaremos.</p>
+
+<h2>11. Cambios en esta política</h2>
+<p>Si la modificamos, cambiamos la fecha de «Última actualización» de esta página y, si el cambio es importante, te avisamos dentro de la aplicación.</p>
+{% endblock %}

@@ -24,16 +24,16 @@
   <table>
     <tr>
       {% if not es_demo %}<th style="width:30px"><input type="checkbox" aria-label="Seleccionar todos" onclick="document.querySelectorAll('.chk').forEach(c=>c.checked=this.checked)"></th>{% endif %}
-      <th>Nombre del archivo</th><th class="ocultar-mov">Fecha subida</th><th>Tipo</th><th class="num">Total doc.</th><th>Acciones</th>
+      <th>Nombre del archivo</th><th class="ocultar-mov">Fecha subida</th><th class="ocultar-mov">Tipo</th><th class="num">Total doc.</th><th>Acciones</th>
     </tr>
     {% for a in historial %}
-    <tr data-abrir="/factura/{{ a.nombre|urlencode }}" title="Doble click para ver la factura">
+    <tr data-abrir="/factura/{{ a.nombre|urlencode }}" title="Doble clic para ver la factura">
       {% if not es_demo %}<td><input type="checkbox" class="chk" name="nombres" value="{{ a.nombre }}"></td>{% endif %}
-      <td>{{ a.nombre }}</td>
+      <td class="nom">{{ a.nombre }}</td>
       <td class="ocultar-mov tenue">{{ a.creado }}</td>
-      <td><span class="chip">{{ a.tipo|capitalize }}</span></td>
+      <td class="ocultar-mov"><span class="chip">{{ a.tipo|capitalize }}</span></td>
       <td class="num">{% if a.total_doc %}{{ a.total_doc|pesos }}{% else %}—{% endif %}</td>
-      <td><a class="btn chico sec" href="/factura/{{ a.nombre|urlencode }}" target="_blank" rel="noopener"><svg class="i"><use href="#i-archivo"/></svg>Ver PDF</a> {% if a.tipo == 'Peajes' %}<a class="btn chico gh" href="/ver/factura?v={{ a.nombre|urlencode }}" target="_blank" rel="noopener">Ver detalle</a> {% endif %}<a class="btn chico gh" href="/reportes/descargar/{{ a.nombre|urlencode }}"><svg class="i"><use href="#i-bajar"/></svg>Descargar</a></td>
+      <td><div class="acciones"><a class="btn chico sec" href="/factura/{{ a.nombre|urlencode }}" target="_blank" rel="noopener"><svg class="i"><use href="#i-archivo"/></svg>Ver PDF</a> {% if a.tipo == 'Peajes' %}<a class="btn chico gh" href="/ver/factura?v={{ a.nombre|urlencode }}" target="_blank" rel="noopener">Ver detalle</a> {% endif %}<a class="btn chico gh" href="/reportes/descargar/{{ a.nombre|urlencode }}"><svg class="i"><use href="#i-bajar"/></svg>Descargar</a></div></td>
     </tr>
     {% else %}<tr><td colspan="{{ 5 if es_demo else 6 }}" class="td-vacio">{{ vacio('historial', 'Todavía no hay archivos en el historial', 'Los archivos que importes quedan guardados acá.') }}</td></tr>{% endfor %}
   </table>

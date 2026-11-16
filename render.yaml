@@ -17,3 +17,8 @@ services:
         sync: false
       - key: CONTACTO_WHATSAPP   # con codigo de pais, ej. +54 9 11 1234-5678
         sync: false
+      # Datos del responsable para /privacidad y /terminos (OPCIONALES: si faltan, esas paginas no los muestran).
+      - key: LEGAL_CUIT
+        sync: false
+      - key: LEGAL_DOMICILIO
+        sync: false

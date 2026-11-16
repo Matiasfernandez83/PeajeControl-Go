@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block titulo %}{% endblock %} · PeajeControl Go</title>
+<meta name="description" content="{% block descripcion %}{% endblock %}">
+<link rel="canonical" href="https://peajecontrol.com.ar{{ request.path }}">
+{% include "_iconos.html" %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/fuentes.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
+</head>
+<body>
+<header class="legal-cab">
+  <div class="wrap">
+    <nav class="nav">
+      <a class="wm" href="/" aria-label="PeajeControl Go, ir al inicio" style="text-decoration:none">{% include "_marca.html" %}
+        <div class="wm-stack"><div>Peajes</div><div>Control</div></div>
+        <div class="wm-go"><b>+</b>GO</div>
+      </a>
+      <a class="btn btn-vidrio btn-sm" href="/">Volver al inicio</a>
+    </nav>
+  </div>
+</header>
+<main>
+<div class="wrap">
+  <article class="legal">
+    <h1>{% block h1 %}{% endblock %}</h1>
+    <p class="act">Última actualización: {{ legal.actualizado }}</p>
+    <p class="nota-legal" role="note">Texto modelo: conviene que lo revise un abogado antes de cobrar.</p>
+    {% block cuerpo %}{% endblock %}
+  </article>
+  <footer class="pie">
+    <span>PeajeControl Go — Software de control de peajes y gastos de flota.</span>
+    <nav class="legal-links" aria-label="Información legal"><a href="/privacidad">Política de privacidad</a><a href="/terminos">Términos y condiciones</a></nav>
+  </footer>
+</div>
+</main>
+</body>
+</html>

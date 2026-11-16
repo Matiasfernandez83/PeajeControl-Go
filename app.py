@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from urllib.parse import quote, urlparse
 from flask import (Flask, g, request, redirect, session, render_template, send_file, url_for, flash, jsonify,
-                   abort, has_request_context)
+                   abort, has_request_context, send_from_directory)
 from werkzeug.security import generate_password_hash, check_password_hash
 from openpyxl import load_workbook, Workbook
 
@@ -97,7 +97,8 @@ DEMO_DURACION = 30 * 60
 DEMO_AVISO = "En la demo no se modifica nada. ¿Querés probarlo con tus facturas?"
 DEMO_PERMITIDAS = frozenset({
     "dashboard", "ver", "ver_archivo", "ver_factura", "movimientos", "importar", "flota", "gastos", "reportes",
-    "descargar_archivo", "exportar", "exportar_gastos", "static", "landing", "salir", "demo_entrar"})
+    "descargar_archivo", "exportar", "exportar_gastos", "static", "landing", "salir", "demo_entrar",
+    "privacidad", "terminos", "favicon"})
 DEMO_LIMITES = {"entrada": (20, 3600), "excel": (5, 3600)}   # ingresos a /demo y exportaciones Excel: maximo por hora y por IP
 USOS_DEMO = defaultdict(list)                                  # (tipo, ip) -> instantes de uso (en memoria, como INTENTOS)
 
@@ -133,6 +134,8 @@ def modo_demo():
         flash("La demo terminó (dura 30 minutos). ¿Querés probarlo con tus facturas?")
         return redirect("/")
     ep = request.endpoint
+    if ep is None and request.url_rule is None and type(request.routing_exception).__name__ == "NotFound":
+        return None   # ninguna ruta coincide: sale la pagina 404 amistosa (no hay nada que bloquear)
     if request.method in ("GET", "HEAD") and ep in DEMO_PERMITIDAS:
         if ep in ("exportar", "exportar_gastos") and demo_excedido("excel"):
             flash("Llegaste al máximo de exportaciones de la demo (5 por hora).")
@@ -766,7 +769,7 @@ def emp():
 @app.before_request
 def requiere_login():
     # "dashboard" es la raiz "/": sin sesion muestra la landing (ver dashboard()); con sesion, el tablero.
-    if request.endpoint not in ("login", "static", "landing", "dashboard", "demo_entrar") and not session.get("uid"):
+    if request.endpoint is not None and request.endpoint not in ("login", "static", "landing", "dashboard", "demo_entrar", "privacidad", "terminos", "favicon") and not session.get("uid"):
         return redirect("/login")
 
 @app.route("/landing")
@@ -818,7 +821,90 @@ def demo_entrar():
 @app.errorhandler(413)
 def archivo_muy_grande(_):
     mb = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
-    return f"Lo que subiste supera el limite permitido ({mb} MB por envio). Dividilo en partes o comprimilo.", 413
+    return f"Lo que subiste supera el límite permitido ({mb} MB por envío). Dividilo en partes o comprimilo.", 413
+
+# ================= PAGINAS LEGALES, ICONO, PAGINAS DE ERROR Y REGISTRO DE ERRORES =================
+LEGAL_ACTUALIZADO = "16 de noviembre de 2026"   # cambiar cada vez que se edite el texto de /privacidad o /terminos
+
+@app.context_processor
+def inyectar_legal():
+    """Datos del responsable para /privacidad y /terminos. Domicilio y CUIT salen de variables de entorno OPCIONALES
+    (LEGAL_DOMICILIO, LEGAL_CUIT): si faltan, la pagina no los muestra (nunca datos inventados)."""
+    return {"legal": {"actualizado": LEGAL_ACTUALIZADO,
+                      "domicilio": (os.environ.get("LEGAL_DOMICILIO") or "").strip(),
+                      "cuit": (os.environ.get("LEGAL_CUIT") or "").strip()}}
+
+@app.route("/privacidad")
+def privacidad():
+    return render_template("privacidad.html")
+
+@app.route("/terminos")
+def terminos():
+    return render_template("terminos.html")
+
+@app.route("/favicon.ico")
+def favicon():
+    return send_from_directory(os.path.join(app.static_folder, "img"), "favicon.ico", max_age=86400)
+
+def pagina_error(codigo, titulo, texto):
+    """Pagina de error amigable (con o sin sesion, tambien en la demo). Si hasta la plantilla falla, texto simple."""
+    try:
+        return render_template("error.html", codigo=codigo, titulo=titulo, texto=texto), codigo
+    except Exception:
+        return (f"<!doctype html><meta charset=utf-8><title>{titulo}</title><h1>{titulo}</h1><p>{texto}</p>"
+                f"<p><a href=\"/\">Volver al inicio</a></p>"), codigo
+
+@app.errorhandler(404)
+def error_404(_):
+    return pagina_error(404, "No encontramos esa página", "La dirección puede estar mal escrita o la página ya no existe.")
+
+@app.errorhandler(405)
+def error_405(_):
+    return pagina_error(405, "Esa acción no está disponible", "Volvé al inicio y probá de nuevo desde ahí.")
+
+@app.errorhandler(429)
+def error_429(_):
+    return pagina_error(429, "Demasiados intentos", "Esperá unos minutos y volvé a probar.")
+
+@app.errorhandler(500)
+def error_500(_):
+    # El detalle ya quedo en el log (Flask lo registra antes de llegar acá, con el formato de abajo).
+    return pagina_error(500, "Algo salió mal de nuestro lado", "El problema quedó registrado. Probá de nuevo en unos minutos.")
+
+# --- Registro de errores: va a stderr (los logs de Render). Cada linea lleva fecha, metodo, ruta (sin parametros),
+# usuario y empresa (solo numeros internos, nunca correos ni datos cargados) y se tapan URLs con clave y claves sueltas. ---
+import logging
+from flask.logging import default_handler
+
+class _ContextoRequest(logging.Filter):
+    def filter(self, r):
+        enreq = has_request_context()
+        r.metodo = request.method if enreq else "-"
+        r.ruta = request.path if enreq else "-"
+        r.uid = session.get("uid", "-") if enreq else "-"
+        r.empresa = session.get("empresa_id", "-") if enreq else "-"
+        return True
+
+class _FormatoSeguro(logging.Formatter):
+    _SECRETOS = ((re.compile(r"([a-z][a-z0-9+.\-]*://)[^/\s:@]+:[^@\s]+@", re.I), r"\1***:***@"),
+                 (re.compile(r"(password|passwd|pwd|clave|secret|token|api[_-]?key)(\s*[=:]\s*)\S+", re.I), r"\1\2***"))
+    def format(self, record):
+        texto = super().format(record)
+        for rx, reemplazo in self._SECRETOS:
+            texto = rx.sub(reemplazo, texto)
+        return texto
+
+def configurar_logs():
+    app.logger.removeHandler(default_handler)
+    h = logging.StreamHandler(sys.stderr)
+    h.addFilter(_ContextoRequest())
+    h.setFormatter(_FormatoSeguro("%(asctime)s %(levelname)s %(metodo)s %(ruta)s uid=%(uid)s empresa=%(empresa)s | %(message)s",
+                                  "%Y-%m-%d %H:%M:%S"))
+    app.logger.addHandler(h)
+    app.logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
+    app.logger.propagate = False
+
+configurar_logs()
 
 def xl(v):
     """Anti inyeccion de formulas: un texto que empieza con = + - @ (o control) se prefija con comilla."""
@@ -962,7 +1048,7 @@ def movimientos():
     if vista == "vehiculo":
         grupos = d.execute("""SELECT COALESCE(NULLIF(patente,''),'S/D') g, COUNT(*) n,
             SUM(monto) t, MAX(dueno) sub FROM movimientos WHERE empresa_id=? GROUP BY 1 ORDER BY t DESC""", (E,)).fetchall()
-        return render_template("movimientos.html", vista=vista, grupos=grupos, q=q, movs=[], etiqueta="Vehiculo")
+        return render_template("movimientos.html", vista=vista, grupos=grupos, q=q, movs=[], etiqueta="Vehículo")
     if vista == "responsable":
         grupos = d.execute("""SELECT COALESCE(NULLIF(dueno,''),'Sin asignar') g, COUNT(*) n,
             SUM(monto) t, COUNT(DISTINCT patente) sub FROM movimientos WHERE empresa_id=? GROUP BY 1 ORDER BY t DESC""", (E,)).fetchall()
@@ -1058,7 +1144,7 @@ def importar():
     if request.method == "POST":
         archivos = [a for a in request.files.getlist("archivo") if a and a.filename]
         if not archivos:
-            flash("Elegi al menos un archivo.")
+            flash("Elegí al menos un archivo.")
             return redirect("/importar")
         omitidos = archivos[MAX_ARCHIVOS_CARGA:]
         archivos = archivos[:MAX_ARCHIVOS_CARGA]
@@ -1120,7 +1206,7 @@ def flota():
             d.execute("DELETE FROM flota WHERE empresa_id=?", (emp(),))
             d.executemany("INSERT INTO flota(empresa_id,tag,patente,dueno,equipo,estado,marca) VALUES(?,?,?,?,?,?,?)", nuevos)
             d.commit()
-            flash(f"Base actualizada: {len(nuevos)} unidades unicas.")
+            flash(f"Base actualizada: {len(nuevos)} unidades únicas.")
         return redirect("/flota")
     q = request.args.get("q", "").strip()
     p = request.args.get("p", "1")
@@ -1254,7 +1340,7 @@ def gastos():
     if request.method == "POST":
         archivos = [a for a in request.files.getlist("archivo") if a and a.filename]
         if not archivos:
-            flash("Elegi al menos un archivo.")
+            flash("Elegí al menos un archivo.")
             return redirect("/gastos")
         for a in archivos[:MAX_ARCHIVOS_CARGA]:
             ok, msg = procesar_resumen(a)

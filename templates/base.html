@@ -8,7 +8,7 @@
    (por defecto: nocturno). Tiene que ser sincrono y estar antes de los CSS; el resto del JS esta en static/js. */
 (function(){var t='dark';try{if(localStorage.getItem('pc-tema')==='light')t='light';}catch(e){}
 document.documentElement.setAttribute('data-theme',t);})();</script>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect width='48' height='48' rx='11' fill='%23E30613'/><rect x='6' y='23' width='19' height='11' rx='2' fill='white'/><path d='M25 25h6l5 5v4H25z' fill='white'/><rect x='24' y='14' width='2' height='11' fill='white'/><circle cx='14' cy='35.5' r='3' fill='%23111'/><circle cx='31' cy='35.5' r='3' fill='%23111'/></svg>">
+{% include "_iconos.html" %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/fuentes.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tema.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
@@ -105,7 +105,7 @@ document.documentElement.setAttribute('data-theme',t);})();</script>
     {% endif %}
   </nav>
   <div class="estado">
-    <div class="online">Sistema online</div>
+    <div class="online">Sistema en línea</div>
     <div class="user">
       <div class="av">{{ (session.nombre or 'A')[:2]|upper }}</div>
       <div class="quien"><b>{{ session.nombre }}</b><small>{{ session.rol|capitalize }}</small></div>
@@ -124,7 +124,7 @@ document.documentElement.setAttribute('data-theme',t);})();</script>
     {% endwith %}
     {% block cuerpo %}{% endblock %}
   </div>
-  <div class="pie">PeajeControl Go · v3.0</div>
+  <div class="pie">PeajeControl Go · v3.0 · <a href="/privacidad">Privacidad</a> · <a href="/terminos">Términos y condiciones</a></div>
 </main>
 
 <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>

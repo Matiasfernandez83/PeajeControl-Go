@@ -121,6 +121,23 @@ footer.pie{display:flex;justify-content:space-between;align-items:center;flex-wr
 .sinia{display:inline-flex;align-items:center;gap:6px;font-weight:600;color:var(--verde)}
 .sinia .i{width:16px;height:16px}
 
+/* Paginas legales (privacidad, terminos): cabecera oscura de la marca + texto en una columna legible */
+.legal-cab{background:linear-gradient(135deg,#0a0d12,#0d1119 60%,#0a0e15);border-bottom:2px solid var(--lima)}
+.legal{max-width:760px;margin:0 auto;padding:clamp(32px,5vw,56px) 0 8px}
+.legal h1{font-size:clamp(26px,4.4vw,38px);line-height:1.15;font-weight:700;letter-spacing:-.025em;text-wrap:balance}
+.legal .act{margin-top:8px;font-size:13px;color:var(--gris)}
+.nota-legal{margin:16px 0 8px;padding:12px 16px;border-radius:var(--radio-ch);font-size:13.5px;font-weight:600;color:var(--tinta);
+  background:rgba(223,255,0,.14);border:1px solid rgba(190,215,0,.6)}
+.legal h2{font-size:18px;font-weight:700;letter-spacing:-.01em;margin:30px 0 8px}
+.legal p,.legal li{font-size:15px;color:var(--tinta);line-height:1.65}
+.legal p{margin-top:10px}
+.legal ul{margin:10px 0 0 20px;display:grid;gap:6px}
+.legal a{color:color-mix(in srgb,var(--azul) 70%,var(--tinta));text-decoration:underline;text-underline-offset:2px;overflow-wrap:anywhere}
+.legal b{font-weight:600}
+.legal-links{display:flex;gap:18px;flex-wrap:wrap}
+.legal-links a{color:var(--gris);text-decoration:none;font-weight:500}
+.legal-links a:hover,.legal-links a:focus-visible{color:var(--tinta);text-decoration:underline;outline:0}
+
 @media(max-width:860px){
   .g3,.franja{grid-template-columns:1fr}
   .feats{grid-template-columns:1fr}

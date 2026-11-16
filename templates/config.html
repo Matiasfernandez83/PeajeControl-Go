@@ -34,7 +34,7 @@
   </div>
   <div class="tarjeta verde">
     <h3 class="con-icono"><svg class="i"><use href="#i-ok"/></svg>Procesamiento 100% local, sin IA</h3>
-    <p class="mini" style="margin:6px 0 0">Esta versión extrae los datos de los PDF con motor propio (sin API keys ni servicios externos).
+    <p class="mini" style="margin:6px 0 0">Esta versión extrae los datos de los PDF con motor propio, sin servicios externos.
     No hay claves que puedan bloquearse ni costos por consumo.</p>
   </div>
 </div>
@@ -44,7 +44,7 @@
     <h3 style="margin-bottom:16px">Usuarios del sistema</h3>
     <div class="tabla-wrap">
     <table>
-      <tr><th>Nombre</th><th>Email</th><th>Rol</th><th></th></tr>
+      <tr><th>Nombre</th><th>Correo</th><th>Rol</th><th></th></tr>
       {% for u in usuarios %}
       <tr>
         <td><b>{{ u.nombre }}</b></td><td>{{ u.email }}</td>
@@ -83,7 +83,7 @@
   </div>
   <div class="tarjeta">
     <h3>Estado del sistema</h3>
-    <p class="mini" style="margin:6px 0 0">Motor de extracción determinístico · SQLite · Flask · v3.0 — <span class="pill ok">Online</span></p>
+    <p class="mini" style="margin:6px 0 0">Lectura automática de archivos · v3.0 — <span class="pill ok">En línea</span></p>
   </div>
 </div>
 {% endblock %}
