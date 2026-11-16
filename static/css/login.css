@@ -51,3 +51,17 @@ button.ojo.ver .o-cerrado{display:block}
 .volver:hover,.volver:focus-visible{color:#fff;text-decoration:underline;outline:0}
 @media(max-width:560px){body{justify-content:center;padding-left:max(16px,env(safe-area-inset-left,0px))}
   .caja{padding:26px 20px}input{font-size:16px}}
+
+/* Enlaces legales bajo el formulario y pagina de error (templates/error.html) */
+.legal-links{display:flex;justify-content:center;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:12px}
+.legal-links a{color:var(--txt2);text-decoration:none}
+.legal-links a:hover,.legal-links a:focus-visible{color:#fff;text-decoration:underline;outline:0}
+body.err{justify-content:center;padding:16px}
+.caja.err-pag{max-width:440px;text-align:center}
+.err-pag .wm{justify-content:center}
+.err-pag .cod{font-size:64px;font-weight:700;letter-spacing:-.03em;line-height:1;color:var(--lima);margin-bottom:10px}
+.err-pag p{font-size:14px;line-height:1.5;margin-bottom:24px}
+a.boton{display:flex;align-items:center;justify-content:center;height:46px;background:var(--rojo);color:#fff;border-radius:var(--radio-ch);
+  font-weight:600;font-size:14.5px;text-decoration:none;box-shadow:0 10px 30px -8px rgba(227,6,19,.55),inset 0 1px 0 rgba(255,255,255,.18);transition:background .15s}
+a.boton:hover{background:#c00511}
+a.boton:focus-visible{outline:0;box-shadow:0 0 0 3px rgba(227,6,19,.4)}

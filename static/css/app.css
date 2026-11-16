@@ -219,6 +219,7 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
 .tabs a:hover{color:var(--txt)}
 .tabs a.act{color:var(--txt);border-bottom-color:var(--rojo)}
 .pie{text-align:center;color:var(--tenue);font-size:12px;padding:20px}
+.pie a{color:var(--gris);text-decoration:none}.pie a:hover,.pie a:focus-visible{color:var(--txt);text-decoration:underline;outline:0}
 
 /* ===== ESTADOS VACIOS ===== */
 .vacio{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:40px 16px;color:var(--gris)}
@@ -283,6 +284,9 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
 #fondo-red{position:fixed;inset:0;z-index:0;width:100%;height:100%;pointer-events:none;opacity:1;display:block}
 @media print{ #fondo-red,.tema-btn{display:none} }
 
+/* ===== RESPONSIVE: escritorio angosto (con el menu lateral, la tabla de 8 columnas no entra: se oculta Equipo) ===== */
+@media(max-width:1400px){ .ocultar-ch{display:none} }
+
 /* ===== RESPONSIVE: tablet y celular ===== */
 @media(max-width:860px){
   body{flex-direction:column}
@@ -301,7 +305,7 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
   .modal .caja{padding:0}
   .modal .cab{padding:16px}
   .modal .cuerpo{padding:0 16px 16px}
-  .dos,.dos.asim{grid-template-columns:1fr}
+  .dos,.dos.asim{grid-template-columns:minmax(0,1fr)}
   .kpi .v{font-size:24px}
   .barra .nombre{width:100px}
   th,td{padding:10px 4px;font-size:12.5px}
@@ -317,6 +321,18 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
   .billetera .carga{width:100%}
   .hero-config{padding:0 20px}
   .ocultar-mov{display:none}
+  .chip{padding:2px 7px;font-size:11.5px}
+  td.nom{overflow-wrap:anywhere;word-break:break-all}
+  .tabla-wrap{margin:0 -12px}   /* las tablas aprovechan el margen de la tarjeta */
+  td .acciones .btn.chico{padding:0 8px}
+}
+@media(max-width:520px){
+  /* con la marca entera, los iconos del menu quedaban cortados: se achica el logo y el espacio entre iconos */
+  aside .marca{padding:10px 6px 10px 12px;gap:6px}
+  aside .wm-ico{width:34px;height:34px}aside .wm{gap:6px}
+  aside .wm-stack div{font-size:13.5px}aside .wm-go{font-size:22px}aside .wm-go b{font-size:15px}
+  aside a.item{padding:0 9px;margin:0 1px}
+  .tema-btn.mov{width:40px;margin-right:4px}
 }
 @media(max-width:480px){
   .kpis{grid-template-columns:1fr 1fr;gap:12px}

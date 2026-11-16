@@ -23,12 +23,12 @@
       <div class="tarjeta drop compacta" style="margin:0">
         <div class="ic-box ac-azul" style="margin:0 auto 12px"><svg class="i"><use href="#i-tarjeta"/></svg></div>
         <b style="margin-bottom:2px">Cargar resumen</b>
-        <p class="mini" style="margin:0 0 12px">Subí un PDF o Excel del banco</p>
+        <p class="mini" style="margin:0 0 12px">Subí el Excel o CSV del banco</p>
         <input type="file" name="archivo" accept=".pdf,.xlsx,.csv" multiple required style="width:100%">
         <button class="btn completo" type="submit" style="margin-top:14px"><svg class="i"><use href="#i-subir"/></svg>Iniciar carga</button>
       </div>
     </form>
-    <div class="cartel-info" role="note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 11v5M12 7.5v.01"/></svg><span>Formatos aceptados: PDF legibles (facturas) · Excel o CSV (resúmenes de tarjeta). No se aceptan imágenes ni PDF escaneados.</span></div>
+    <div class="cartel-info" role="note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 11v5M12 7.5v.01"/></svg><span>Formato recomendado: Excel o CSV. También se puede subir un PDF, pero solo si tiene texto: los PDF escaneados y las imágenes no se leen.</span></div>
   </div>{% endif %}
   <div class="lista">
     <div class="fila">
@@ -74,8 +74,8 @@
   <table>
     <tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th class="ocultar-mov">Resumen origen</th><th class="num">Monto</th></tr>
     {% for m in detalle %}
-    <tr{% if m.archivo_id %} data-abrir="/archivo/{{ m.archivo_id }}" title="Doble click para ver la factura"{% endif %}>
-      <td>{{ m.fecha }}</td><td style="font-weight:600">{{ m.concepto }}</td>
+    <tr{% if m.archivo_id %} data-abrir="/archivo/{{ m.archivo_id }}" title="Doble clic para ver la factura"{% endif %}>
+      <td class="fecha">{{ (m.fecha or '')[:5] }}<span class="anio">{{ (m.fecha or '')[5:] }}</span></td><td style="font-weight:600">{{ m.concepto }}</td>
       <td><span class="chip {{ m.categoria }}">{{ m.categoria|capitalize }}</span></td>
       <td class="ocultar-mov tenue">{{ origen(m) }}</td>
       <td class="num">{{ m.monto|pesos }}</td>

@@ -1,0 +1,50 @@
+{% extends "legal_base.html" %}
+{% block titulo %}Términos y condiciones{% endblock %}
+{% block descripcion %}Condiciones de uso de PeajeControl Go: prueba y suscripción, responsabilidades, baja y exportación de datos.{% endblock %}
+{% block h1 %}Términos y condiciones{% endblock %}
+{% block cuerpo %}
+<p>Estas condiciones regulan el uso de PeajeControl Go. Al crear una cuenta o usar el servicio, las aceptás. Si no estás de acuerdo, no lo uses.</p>
+
+<h2>1. Qué es PeajeControl Go</h2>
+<p>Es un servicio en la nube, accesible desde el navegador, que lee facturas de peaje y resúmenes de gastos, los cruza contra la flota de tu empresa y muestra tableros, reportes y exportaciones. Lo presta <b>Matías Federico Fernández</b>{% if legal.cuit %} (CUIT {{ legal.cuit }}){% endif %}{% if legal.domicilio %}, con domicilio en {{ legal.domicilio }}{% endif %}.</p>
+
+<h2>2. Prueba y suscripción</h2>
+<p>Podemos ofrecerte un período de prueba. Después, el uso continúa mediante una suscripción cuyo precio y condiciones dependen del plan (según la cantidad de unidades de tu flota) y se te informan antes de contratar. No se te cobra nada sin que lo hayas aceptado antes.</p>
+
+<h2>3. Tu cuenta</h2>
+<p>Los datos que das al registrarte tienen que ser verdaderos. Cada persona usa su propio usuario y cuida su clave. Sos responsable de lo que se haga con las cuentas de tu empresa y tenés que avisarnos si sospechás que alguien accedió sin permiso.</p>
+
+<h2>4. Los datos que subís</h2>
+<ul>
+  <li>Seguís siendo el titular de tus datos. Nos autorizás a procesarlos solamente para darte el servicio, como explica la <a href="/privacidad">política de privacidad</a>.</li>
+  <li>Sos responsable de tener derecho a subirlos, incluidos los datos de choferes y responsables de tu flota, y de informarles lo que corresponda según la Ley 25.326.</li>
+  <li>No subas contenido ilegal, archivos con virus ni datos que no hagan falta para usar el servicio.</li>
+</ul>
+
+<h2>5. Es una herramienta de control, no una revisión contable</h2>
+<p>PeajeControl Go ayuda a ordenar y controlar peajes y gastos, pero <b>no reemplaza la revisión contable</b> ni es asesoramiento contable, impositivo o legal. La lectura automática de los archivos puede tener errores, sobre todo si cambia el formato de una factura. Antes de pagar, reclamar o registrar un importe, revisá los resultados contra el documento original.</p>
+
+<h2>6. Disponibilidad</h2>
+<p>Hacemos lo razonable para que el servicio funcione siempre, pero puede haber interrupciones por mantenimiento o por fallas de los proveedores en la nube. No garantizamos que funcione sin cortes ni sin errores.</p>
+
+<h2>7. Limitación de responsabilidad</h2>
+<p>En la medida que la ley lo permita, no respondemos por daños indirectos, pérdida de ganancias ni por decisiones tomadas a partir de resultados que no se hayan revisado. Si hubiera una responsabilidad nuestra, tendrá como tope lo que pagaste por el servicio en los 3 meses anteriores al hecho. Esto no limita derechos que la ley no permite limitar, como los de la normativa de defensa del consumidor, si te corresponden.</p>
+
+<h2>8. Baja y exportación de tus datos</h2>
+<ul>
+  <li>Podés dejar de usar el servicio cuando quieras avisándonos por los medios de contacto.</li>
+  <li>Antes de la baja, podés exportar a Excel tus movimientos y tus gastos desde la aplicación. Si necesitás otra parte de tus datos, pedinosla.</li>
+  <li>Después de la baja borramos los datos de tu empresa en los plazos de la <a href="/privacidad">política de privacidad</a>.</li>
+  <li>Podemos suspender una cuenta, avisando antes, si se incumplen estas condiciones o si hay falta de pago.</li>
+</ul>
+
+<h2>9. Propiedad intelectual</h2>
+<p>El software, el diseño y la marca PeajeControl Go son nuestros. Te damos un permiso de uso mientras tu cuenta esté activa; no podés copiarlos, revenderlos ni intentar acceder a datos de otras empresas.</p>
+
+<h2>10. Cambios</h2>
+<p>Podemos modificar el servicio o estas condiciones. Si el cambio es importante te avisamos dentro de la aplicación o por tus datos de contacto, con tiempo razonable. Si seguís usando el servicio después del aviso, entendemos que aceptás los cambios; si no, podés pedir la baja.</p>
+
+<h2>11. Ley aplicable y contacto</h2>
+<p>Estas condiciones se rigen por las leyes de la República Argentina y cualquier conflicto se somete a los tribunales ordinarios competentes. Para consultas:
+{% if contacto.whatsapp %}WhatsApp <a href="{{ contacto.whatsapp_url }}" target="_blank" rel="noopener">{{ contacto.whatsapp }}</a>{% endif %}{% if contacto.whatsapp and contacto.email %} · {% endif %}{% if contacto.email %}<a href="{{ contacto.mailto }}">{{ contacto.email }}</a>{% endif %}{% if not contacto.hay %}los medios que figuran en la <a href="/landing#contacto">portada</a>{% endif %}.</p>
+{% endblock %}

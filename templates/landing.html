@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect width='48' height='48' rx='11' fill='%23E30613'/><rect x='6' y='23' width='19' height='11' rx='2' fill='white'/><path d='M25 25h6l5 5v4H25z' fill='white'/><rect x='24' y='14' width='2' height='11' fill='white'/><circle cx='14' cy='35.5' r='3' fill='%23111'/><circle cx='31' cy='35.5' r='3' fill='%23111'/></svg>">
+{% include "_iconos.html" %}
 <title>PeajeControl Go · Control de peajes y gastos de flota</title>
 <meta name="description" content="Cargá tus facturas de peaje y los gastos de tarjeta, cruzá cada TAG contra tu flota y mirá cuánto gasta cada camión y cada responsable.">
 <link rel="canonical" href="https://peajecontrol.com.ar/">
@@ -13,7 +13,15 @@
 <meta property="og:title" content="PeajeControl Go · Control de peajes y gastos de flota">
 <meta property="og:description" content="Cargá tus facturas de peaje y los gastos de tarjeta, cruzá cada TAG contra tu flota y mirá cuánto gasta cada camión y cada responsable.">
 <meta property="og:url" content="https://peajecontrol.com.ar/">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="https://peajecontrol.com.ar/static/img/og-peajecontrol.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="PeajeControl Go: controlá los peajes de tu flota">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="PeajeControl Go · Control de peajes y gastos de flota">
+<meta name="twitter:description" content="Cargá tus facturas de peaje y los gastos de tarjeta, cruzá cada TAG contra tu flota y mirá cuánto gasta cada camión y cada responsable.">
+<meta name="twitter:image" content="https://peajecontrol.com.ar/static/img/og-peajecontrol.png">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/fuentes.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
 </head>
@@ -179,6 +187,7 @@
 
   <footer class="pie">
     <span>PeajeControl Go — Software de control de peajes y gastos de flota.</span>
+    <nav class="legal-links" aria-label="Información legal"><a href="/privacidad">Política de privacidad</a><a href="/terminos">Términos y condiciones</a></nav>
     <span class="sinia"><svg class="i" aria-hidden="true"><use href="#ic-shield"/></svg> Datos separados por empresa · conexión cifrada · sin IA</span>
   </footer>
 
