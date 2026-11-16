@@ -92,7 +92,7 @@ Si no se cargan, la landing muestra datos de ejemplo (`tuemail@peajecontrol.com`
   (el stream se leía dos veces). UI: filtros Todos/Verificados/Sin match + barra de
   resumen en Movimientos.
 - **Iteración 3 (producción)**: gunicorn `--timeout 120 --workers 1`, requirements
-  pineados, `MAX_CONTENT_LENGTH` 25 MB, cookies HttpOnly/SameSite/Secure, escape XSS
+  pineados, `MAX_CONTENT_LENGTH` (hoy 60 MB), cookies HttpOnly/SameSite/Secure, escape XSS
   en el detalle.
 - **Iteración 4 (esta)**: migración a **PostgreSQL/Supabase** manteniendo compatibilidad
   con SQLite en dev. `render.yaml` pasó a plan free sin disco, con `DATABASE_URL`.

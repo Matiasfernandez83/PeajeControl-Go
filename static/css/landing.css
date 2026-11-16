@@ -112,7 +112,7 @@ h2.titulo{font-size:clamp(22px,3.2vw,30px);font-weight:700;letter-spacing:-.02em
   box-shadow:0 20px 50px -20px rgba(227,6,19,.55)}
 .cta h2{font-size:clamp(21px,3vw,28px);font-weight:700;letter-spacing:-.02em;line-height:1.2;max-width:20ch;text-wrap:balance}
 .cta .datos{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
-.cta .datos a.dato{color:#fff;text-decoration:none;display:inline-flex;align-items:center;gap:10px;font-weight:500;font-size:14px}
+.cta .datos a.dato{overflow-wrap:anywhere;color:#fff;text-decoration:none;display:inline-flex;align-items:center;gap:10px;font-weight:500;font-size:14px}
 .cta .datos a.dato:hover{text-decoration:underline}
 .cta .datos .btn{margin-top:6px}
 

@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect width='48' height='48' rx='11' fill='%23E30613'/><rect x='6' y='23' width='19' height='11' rx='2' fill='white'/><path d='M25 25h6l5 5v4H25z' fill='white'/><rect x='24' y='14' width='2' height='11' fill='white'/><circle cx='14' cy='35.5' r='3' fill='%23111'/><circle cx='31' cy='35.5' r='3' fill='%23111'/></svg>">
 <title>PeajeControl Go · Control de peajes y gastos de flota</title>
+<meta name="description" content="Cargá tus facturas de peaje y los gastos de tarjeta, cruzá cada TAG contra tu flota y mirá cuánto gasta cada camión y cada responsable.">
+<link rel="canonical" href="https://peajecontrol.com.ar/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="PeajeControl Go">
+<meta property="og:locale" content="es_AR">
+<meta property="og:title" content="PeajeControl Go · Control de peajes y gastos de flota">
+<meta property="og:description" content="Cargá tus facturas de peaje y los gastos de tarjeta, cruzá cada TAG contra tu flota y mirá cuánto gasta cada camión y cada responsable.">
+<meta property="og:url" content="https://peajecontrol.com.ar/">
+<meta name="twitter:card" content="summary">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/fuentes.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
 </head>
@@ -71,12 +80,17 @@
     <div class="hero-cuerpo">
       <span class="eyebrow">Para empresas con flota de vehículos</span>
       <h1>Dejá de conciliar peajes y tarjetas <em>a mano</em>.</h1>
-      <p class="bajada">PeajeControl Go lee tus facturas de peaje (AUSA, AUBASA, Telepase) y los resúmenes de tarjetas,
-        cruza cada TAG contra tu flota y te muestra cuánto gasta cada camión y cada responsable.
-        Lo que hoy te lleva horas de Excel, pasa a minutos — y sin que se te escape ningún error de facturación.</p>
+      <p class="bajada">PeajeControl Go lee tus facturas de peaje en PDF (AUSA, AUSOL, AUBASA, Autovía del Mercosur, GCO, CEAMSE,
+        Caminos de las Sierras, AP01 Santa Fe), suma los gastos de tarjeta desde Excel o CSV, cruza cada pase contra tu flota
+        y te muestra cuánto gasta cada camión y cada responsable.
+        Lo que hoy te lleva horas de Excel se resuelve en mucho menos tiempo, y te marca las diferencias entre lo facturado y lo cargado.</p>
       <div class="acciones">
+        {% if contacto.hay %}
         <a class="btn btn-rojo" href="#contacto">Solicitar demo <svg class="i" aria-hidden="true"><use href="#ic-arrow"/></svg></a>
         <a class="btn btn-vidrio" href="/login">Ingresar</a>
+        {% else %}
+        <a class="btn btn-rojo" href="/login">Ingresar <svg class="i" aria-hidden="true"><use href="#ic-arrow"/></svg></a>
+        {% endif %}
       </div>
       <div class="producto"><b>Software para flotas</b> · Control de peajes &amp; gastos</div>
     </div>
@@ -93,7 +107,7 @@
       <div class="tarjeta"><span class="ic-box ac-azul"><svg class="i" aria-hidden="true"><use href="#ic-doc"/></svg></span><h3>Horas de Excel por mes</h3>
         <p>Alguien de Administración cruza a mano cada pase de peaje y cada consumo contra la lista de camiones.</p></div>
       <div class="tarjeta"><span class="ic-box ac-rojo"><svg class="i" aria-hidden="true"><use href="#ic-alert"/></svg></span><h3>Errores que se pagan igual</h3>
-        <p>Cobros duplicados, TAGs de unidades que ya no están, importes que no cierran. Sin control, se pagan.</p></div>
+        <p>TAGs de unidades que ya no están, importes que no cierran. Si nadie lo revisa, se pagan.</p></div>
       <div class="tarjeta"><span class="ic-box ac-verde"><svg class="i" aria-hidden="true"><use href="#ic-eye"/></svg></span><h3>Cero visibilidad por unidad</h3>
         <p>¿Cuánto gastó realmente cada camión o cada responsable en peajes este mes? Nadie lo sabe rápido.</p></div>
     </div>
@@ -106,15 +120,15 @@
       <div class="tarjeta paso"><span class="ic-box ac-azul"><svg class="i" aria-hidden="true"><use href="#ic-truck"/></svg></span><div class="n">Paso 1</div><h3>Subís tu flota una vez</h3>
         <p>Cargás tu base de TAGs y patentes desde un Excel. Queda como tu padrón maestro.</p></div>
       <div class="tarjeta paso"><span class="ic-box ac-rojo"><svg class="i" aria-hidden="true"><use href="#ic-upload"/></svg></span><div class="n">Paso 2</div><h3>Subís la factura o el resumen</h3>
-        <p>PDF de peajes o resumen bancario. El sistema extrae cada pase y cada consumo solo.</p></div>
+        <p>PDF de peajes (con texto, no escaneado) o Excel/CSV. Los gastos de tarjeta se cargan desde Excel o CSV.</p></div>
       <div class="tarjeta paso"><span class="ic-box ac-verde"><svg class="i" aria-hidden="true"><use href="#ic-chart"/></svg></span><div class="n">Paso 3</div><h3>Ves todo cruzado y controlado</h3>
-        <p>Gasto por camión y responsable, TAGs verificados, y un semáforo que valida el total del documento.</p></div>
+        <p>Gasto por camión y responsable, TAGs verificados, y un semáforo que compara el total de la factura con lo cargado.</p></div>
     </div>
   </section>
 
   <section class="franja">
-    <div><svg class="i" aria-hidden="true"><use href="#ic-clock"/></svg><div class="big">De <u>horas</u> a minutos</div><p>La conciliación mensual de peajes deja de ser una tarea manual.</p></div>
-    <div><svg class="i" aria-hidden="true"><use href="#ic-truck"/></svg><div class="big">Control por <u>camión</u></div><p>Sabés al instante cuánto gasta cada unidad y cada responsable de la flota.</p></div>
+    <div><svg class="i" aria-hidden="true"><use href="#ic-clock"/></svg><div class="big">Menos <u>horas</u> de Excel</div><p>La conciliación mensual de peajes deja de depender de cruzar planillas a mano.</p></div>
+    <div><svg class="i" aria-hidden="true"><use href="#ic-truck"/></svg><div class="big">Control por <u>camión</u></div><p>Ves cuánto gasta cada unidad y cada responsable de la flota.</p></div>
     <div><svg class="i" aria-hidden="true"><use href="#ic-light"/></svg><div class="big">Semáforo de <u>facturación</u></div><p>Detectás diferencias entre lo que dice el documento y lo realmente cargado.</p></div>
   </section>
 
@@ -122,10 +136,10 @@
     <div class="rotulo">Funcionalidades</div>
     <h2 class="titulo">Todo lo que incluye</h2>
     <div class="feats">
-      <div class="feat"><span class="ic-box"><svg class="i" aria-hidden="true"><use href="#ic-doc"/></svg></span><p><b>Lectura automática de PDF</b> de peajes (AUSA, AUBASA, Telepase) y Excel/CSV.</p></div>
-      <div class="feat"><span class="ic-box"><svg class="i" aria-hidden="true"><use href="#ic-link"/></svg></span><p><b>Cruce automático de TAGs</b> contra tu padrón de flota.</p></div>
-      <div class="feat"><span class="ic-box"><svg class="i" aria-hidden="true"><use href="#ic-card"/></svg></span><p><b>Resúmenes de tarjeta</b> con categorización de gastos (peaje, combustible, mantenimiento).</p></div>
-      <div class="feat"><span class="ic-box"><svg class="i" aria-hidden="true"><use href="#ic-chart"/></svg></span><p><b>Tablero</b> con gasto por responsable y por vehículo, en vivo.</p></div>
+      <div class="feat"><span class="ic-box"><svg class="i" aria-hidden="true"><use href="#ic-doc"/></svg></span><p><b>Lectura automática de PDF</b> de peajes (AUSA, AUSOL, AUBASA, Autovía del Mercosur, GCO, CEAMSE, Caminos de las Sierras, AP01 Santa Fe) y de Excel/CSV.</p></div>
+      <div class="feat"><span class="ic-box"><svg class="i" aria-hidden="true"><use href="#ic-link"/></svg></span><p><b>Cruce automático</b> de cada pase contra tu padrón de flota, por TAG o por patente.</p></div>
+      <div class="feat"><span class="ic-box"><svg class="i" aria-hidden="true"><use href="#ic-card"/></svg></span><p><b>Gastos de tarjeta</b> cargados desde Excel o CSV, con categorías (peaje, combustible, mantenimiento).</p></div>
+      <div class="feat"><span class="ic-box"><svg class="i" aria-hidden="true"><use href="#ic-chart"/></svg></span><p><b>Tablero</b> con gasto por responsable y por vehículo.</p></div>
       <div class="feat"><span class="ic-box"><svg class="i" aria-hidden="true"><use href="#ic-sheet"/></svg></span><p><b>Exportación a Excel</b> de movimientos y gastos consolidados.</p></div>
       <div class="feat"><span class="ic-box"><svg class="i" aria-hidden="true"><use href="#ic-history"/></svg></span><p><b>Historial de archivos</b> con re-descarga del documento original.</p></div>
       <div class="feat"><span class="ic-box"><svg class="i" aria-hidden="true"><use href="#ic-users"/></svg></span><p><b>Multiusuario</b> con roles para tu equipo de Administración.</p></div>
@@ -139,25 +153,32 @@
     <div class="grilla g3">
       <div class="tarjeta plan"><div class="et">Plan Chico</div><div class="flota">Hasta 25 unidades</div>
         <p>Ideal para empresas que arrancan a ordenar sus peajes y gastos.</p></div>
-      <div class="tarjeta plan destacado"><span class="badge">Más elegido</span><div class="et">Plan Mediano</div><div class="flota">26 a 100 unidades</div>
+      <div class="tarjeta plan destacado"><span class="badge">Recomendado</span><div class="et">Plan Mediano</div><div class="flota">26 a 100 unidades</div>
         <p>Para flotas en crecimiento que ya necesitan control fino por unidad.</p></div>
       <div class="tarjeta plan"><div class="et">Plan Flota</div><div class="flota">Más de 100 unidades</div>
-        <p>A medida, con soporte prioritario y acompañamiento en la carga.</p></div>
+        <p>A medida, según la cantidad de unidades y la forma de carga.</p></div>
     </div>
   </section>
 
   <section class="cta" id="contacto">
+    {% if contacto.hay %}
     <h2>Pedí una demo y ordená los peajes de tu flota.</h2>
     <div class="datos">
-      <a class="dato" href="{{ contacto.mailto }}"><svg class="i" aria-hidden="true"><use href="#ic-mail"/></svg> {{ contacto.email }}</a>
-      <a class="dato" href="{{ contacto.whatsapp_url }}" target="_blank" rel="noopener"><svg class="i" aria-hidden="true"><use href="#ic-phone"/></svg> {{ contacto.whatsapp }}</a>
-      <a class="btn btn-blanco" href="{{ contacto.mailto }}">Solicitar demo</a>
+      {% if contacto.email %}<a class="dato" href="{{ contacto.mailto }}"><svg class="i" aria-hidden="true"><use href="#ic-mail"/></svg> {{ contacto.email }}</a>{% endif %}
+      {% if contacto.whatsapp %}<a class="dato" href="{{ contacto.whatsapp_url }}" target="_blank" rel="noopener"><svg class="i" aria-hidden="true"><use href="#ic-phone"/></svg> {{ contacto.whatsapp }}</a>{% endif %}
+      <a class="btn btn-blanco" href="{{ contacto.mailto or contacto.whatsapp_url }}"{% if not contacto.mailto %} target="_blank" rel="noopener"{% endif %}>Solicitar demo</a>
     </div>
+    {% else %}
+    <h2>Ordená los peajes de tu flota.</h2>
+    <div class="datos">
+      <a class="btn btn-blanco" href="/login">Ingresar</a>
+    </div>
+    {% endif %}
   </section>
 
   <footer class="pie">
     <span>PeajeControl Go — Software de control de peajes y gastos de flota.</span>
-    <span class="sinia"><svg class="i" aria-hidden="true"><use href="#ic-shield"/></svg> Procesamiento 100% local · sin IA · sin costos por consumo</span>
+    <span class="sinia"><svg class="i" aria-hidden="true"><use href="#ic-shield"/></svg> Datos separados por empresa · conexión cifrada · sin IA</span>
   </footer>
 
 </div>
